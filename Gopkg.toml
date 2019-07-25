@@ -1,0 +1,87 @@
+#
+# Copyright 2017 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Gopkg.toml example
+#
+# Refer to https://github.com/golang/dep/blob/master/docs/Gopkg.toml.md
+# for detailed Gopkg.toml documentation.
+#
+# required = ["github.com/user/thing/cmd/thing"]
+# ignored = ["github.com/user/project/pkgX", "bitbucket.org/user/project/pkgA/pkgY"]
+#
+# [[constraint]]
+#   name = "github.com/user/project"
+#   version = "1.0.0"
+#
+# [[constraint]]
+#   name = "github.com/user/project2"
+#   branch = "dev"
+#   source = "github.com/myfork/project2"
+#
+# [[override]]
+#  name = "github.com/x/y"
+#  version = "2.4.0"
+
+
+[[constraint]]
+  version = "0.1.2"
+  name = "github.com/aliyun/aliyun-log-go-sdk"
+
+
+[[constraint]]
+  revision = "4a014e695db52bb90e116f51b4f0df98900fd0db"
+  name = "github.com/kubernetes-incubator/custom-metrics-apiserver"
+
+[[constraint]]
+  branch = "release-1.14"
+  name = "k8s.io/metrics"
+
+
+[[constraint]]
+  version = "v11.0.0"
+  name = "k8s.io/client-go"
+
+[[override]]
+  branch = "release-1.14"
+  name = "k8s.io/apiserver"
+
+[[override]]
+  branch = "release-1.14"
+  name = "k8s.io/api"
+
+[[override]]
+  branch = "release-1.14"
+  name = "k8s.io/component-base"
+
+[[override]]
+  revision = "c2654d5206da6b7b6ace12841e8f359bb89b443c"
+  name = "k8s.io/utils"
+
+[[override]]
+  revision = "b3a7cee44a305be0a69e1b9ac03018307287e1b0"
+  name = "k8s.io/kube-openapi"
+
+[[override]]
+  revision = "e85c7b244fd2cc57bb829d73a061f93a441e63ce"
+  name = "sigs.k8s.io/structured-merge-diff"
+
+[[override]]
+  branch = "release-1.14"
+  name = "k8s.io/apimachinery"
+
+[[override]]
+  name = "github.com/prometheus/client_golang"
+  revision = "505eaef017263e299324067d40ca2c48f6a2cf50"
