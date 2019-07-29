@@ -126,7 +126,7 @@ func (sb *SLBMetricSource) Client() (client *cms.Client, err error) {
 		return nil, err
 	}
 
-	client, err = cms.NewClientWithAccessKey(accessUserInfo.Region, accessUserInfo.AccessKeyId, accessUserInfo.AccessKeySecret)
+	client, err = cms.NewClientWithStsToken(accessUserInfo.Region, accessUserInfo.AccessKeyId, accessUserInfo.AccessKeySecret,accessUserInfo.Token)
 
 	if err != nil {
 		log.Errorf("Failed to create slb client,because of %v", err)
