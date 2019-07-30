@@ -40,7 +40,7 @@ func (ss *SLSMetricSource) getSLSIngressQuery(params *SLSIngressParams, metricNa
 	case SLS_INGRESS_LATENCY_P50:
 		queryItem = "approx_percentile(request_time, 0.50) * 1000000"
 	case SLS_INGRESS_LATENCY_P95:
-		queryItem="approx_percentile(request_time, 0.95) * 1000000"
+		queryItem = "approx_percentile(request_time, 0.95) * 1000000"
 	case SLS_INGRESS_LATENCY_P9999:
 		queryItem = "approx_percentile(request_time, 0.9999) * 1000000"
 	case SLS_INGRESS_LATENCY_P99:
