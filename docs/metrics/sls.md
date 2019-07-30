@@ -20,6 +20,7 @@ optional params
 | sls_ingress_qps | QPS of a specific ingress route |
 | sls_ingress_latency_avg | latency of all requests |
 | sls_ingress_latency_p50 | latency of 50% requests|
+| sls_ingress_latency_p95 | latency of 95% requests |
 | sls_ingress_latency_p99 | latency of 99% requests |
 | sls_ingress_latency_p9999 | latency of 99.99% requests |
 | sls_ingress_inflow | inflow bandwidth of ingress |

@@ -16,6 +16,7 @@ const (
 	SLS_INGRESS_QPS         = "sls_ingress_qps"
 	SLS_INGRESS_LATENCY_AVG = "sls_ingress_latency_avg"
 	SLS_INGRESS_LATENCY_P50 = "sls_ingress_latency_p50"
+	SLS_INGRESS_LATENCY_P95 = "sls_ingress_latency_p95"
 	SLS_INGRESS_LATENCY_P9999 = "sls_ingress_latency_p9999"
 	SLS_INGRESS_LATENCY_P99 = "sls_ingress_latency_p99"
 	SLS_INGRESS_INFLOW      = "sls_ingress_inflow" // byte per second
@@ -49,6 +50,10 @@ func (ss *SLSMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 		Metric: SLS_INGRESS_LATENCY_P50,
 	})
 	//Ingress latency 95%
+	metricInfoList=append(metricInfoList,p.ExternalMetricInfo{
+		Metric:SLS_INGRESS_LATENCY_P95,
+	})
+	//Ingress latency 99.99%
 	metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
 		Metric: SLS_INGRESS_LATENCY_P9999,
 	})

@@ -1,0 +1,24 @@
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ingress-qps-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1beta2
+    kind: Deployment
+    name: kubecon-springboot-demo
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: sls_ingress_qps
+          selector:
+            matchLabels:
+              sls.project: "k8s-log-xxxxxx"
+              sls.logstore: "xxxxx-xxxx"
+              sls.ingress.route: "default-kubecon-springboot-demo-6666"
+        target:
+          type: AverageValue
+          averageValue: 10
