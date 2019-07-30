@@ -1,0 +1,25 @@
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cms-cpu-hpa
+  namespace: kube-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1beta2
+    kind: Deployment
+    name: arms-springboot-demo-hanyan-system
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: k8s_workload_cpu_util
+          selector:
+            matchLabels:
+              k8s.cluster.id: "xxx"
+              k8s.workload.type: "Deployment"
+              k8s.workload.name: "xxx"
+        target:
+          type: AverageValue
+          averageValue: 10m

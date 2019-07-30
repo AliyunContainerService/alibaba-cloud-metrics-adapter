@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
 	slssdk "github.com/aliyun/aliyun-log-go-sdk"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,6 +41,8 @@ func (ss *SLSMetricSource) getSLSIngressQuery(params *SLSIngressParams, metricNa
 		queryItem = "approx_percentile(request_time, 0.50) * 1000000"
 	case SLS_INGRESS_LATENCY_P95:
 		queryItem = "approx_percentile(request_time, 0.95) * 1000000"
+	case SLS_INGRESS_LATENCY_P9999:
+		queryItem = "approx_percentile(request_time, 0.9999) * 1000000"
 	case SLS_INGRESS_LATENCY_P99:
 		queryItem = "approx_percentile(request_time, 0.99) * 1000000"
 	case SLS_INGRESS_INFLOW:

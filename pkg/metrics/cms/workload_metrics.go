@@ -1,21 +1,22 @@
 package cms
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
-	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/cms"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/utils"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/cms"
+	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	log "k8s.io/klog"
 	"k8s.io/metrics/pkg/apis/external_metrics"
-	"strconv"
-	"time"
-	"encoding/json"
-	"strings"
 )
 
 const (
@@ -177,8 +178,8 @@ func (cs *CMSMetricSource) getMetricListByGroupId(params *CMSMetricParams, group
 	request.Dimensions = dimensions
 
 	// time range
-	startTime := time.Now().Add(time.Duration(params.Period) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
-	endTime := time.Now().Format(utils.DEFAULT_TIME_FORMAT)
+	endTime := time.Now().Add((-1)*time.Duration(params.Period) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
+	startTime := time.Now().Format(utils.DEFAULT_TIME_FORMAT)
 	request.StartTime = startTime
 	request.EndTime = endTime
 
