@@ -178,8 +178,9 @@ func (cs *CMSMetricSource) getMetricListByGroupId(params *CMSMetricParams, group
 	request.Dimensions = dimensions
 
 	// time range
-	endTime := time.Now().Add((-1)*time.Duration(params.Period) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
-	startTime := time.Now().Format(utils.DEFAULT_TIME_FORMAT)
+	startTime:=time.Now().Add(time.Duration(params.Period)*(-6)*time.Second).Format(utils.DEFAULT_TIME_FORMAT)
+	endTime := time.Now().Add(time.Duration(params.Period)*(-1)*time.Second).Format(utils.DEFAULT_TIME_FORMAT)
+
 	request.StartTime = startTime
 	request.EndTime = endTime
 
