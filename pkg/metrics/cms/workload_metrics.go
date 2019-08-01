@@ -35,14 +35,14 @@ const (
 )
 
 type DataPoint struct {
-	Timestamp int64
-	UserId    string
-	GroupId   string
-	Value     float64
-	Sum       float64
-	Average   float64
-	Maximum   float64
-	Minimum   float64
+	Timestamp int64 `json:"timestamp"`
+	UserId    string `json:"userId"`
+	GroupId   string `json:"groupId"`
+	Value     float64 `json:"value"`
+	Sum       float64 `json:"Sum"`
+	Average   float64 `json:"average"`
+	Maximum   float64 `json:"maximum"`
+	Minimum   float64 `json:"minimum"`
 }
 
 type CMSMetricParams struct {
@@ -75,7 +75,6 @@ func (cs *CMSMetricSource) getCMSWorkLoadMetrics(namespace string, requires labe
 	}
 
 	dataPoints, err := cs.getMetricListByGroupId(params, groupId, info.Metric)
-
 	if err != nil {
 		return values, err
 	}
@@ -84,7 +83,7 @@ func (cs *CMSMetricSource) getCMSWorkLoadMetrics(namespace string, requires labe
 		values = append(values, external_metrics.ExternalMetricValue{
 			MetricName: info.Metric,
 			Timestamp:  metav1.Now(),
-			Value:      *resource.NewQuantity(int64(dataPoints[len(dataPoints)-1].Value), resource.DecimalSI),
+			Value:      *resource.NewQuantity(int64(dataPoints[len(dataPoints)-1].Sum), resource.DecimalSI),
 		})
 	}
 	return values, err
@@ -197,7 +196,6 @@ func (cs *CMSMetricSource) getMetricListByGroupId(params *CMSMetricParams, group
 		log.Errorf("Failed to describe metric list,because of %v", err)
 		return
 	}
-
 	if response.Success {
 		dataPoint := response.Datapoints
 		if dataPoint == "" {
@@ -205,10 +203,12 @@ func (cs *CMSMetricSource) getMetricListByGroupId(params *CMSMetricParams, group
 		}
 
 		var res []DataPoint
+
 		err := json.Unmarshal([]byte(dataPoint), &res)
 		if err != nil {
 			return values, fmt.Errorf("json unmarshal datapoint exception %v", err)
 		}
+		return res,nil
 	}
 	return values, err
 }
