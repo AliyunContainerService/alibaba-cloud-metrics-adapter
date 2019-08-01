@@ -5,6 +5,6 @@ This table lists the time delays for each metric：
 | Metric Name | delay time（avg） |
 | :---------- | ----------------- |
 | **SLB **    | **4s**            |
-| **CMS **    | **s**            |
-| **SLS **    | **s**            |
+| **CMS **    | **3s**            |
+| **SLS **    | **5s**            |
 
