@@ -19,7 +19,7 @@ spec:
       serviceAccountName: admin
       containers:
       - name: alibaba-cloud-metrics-adapter
-        image: registry.cn-beijing.aliyuncs.com/ringtail/alibaba-cloud-metrics-adapter:0.17
+        image: registry.cn-beijing.aliyuncs.com/ringtail/alibaba-cloud-metrics-adapter:v0.1.0-alpha-ccef78cb
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 443
@@ -69,19 +69,6 @@ spec:
   groupPriorityMinimum: 100
   versionPriority: 100
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
-kind: ClusterRoleBinding
-metadata:
-  name: custom-metrics-resource-reader-view
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: view
-subjects:
-- kind: ServiceAccount
-  name: horizontal-pod-autoscaler
-  namespace: kube-system
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -95,7 +82,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding
 metadata:
-  name: custom-metrics-resource-reader
+  name: external-metrics-resource-reader
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

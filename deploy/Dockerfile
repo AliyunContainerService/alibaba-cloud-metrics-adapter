@@ -3,7 +3,7 @@ FROM golang:1.12.6 AS build-env
 WORKDIR /src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter
 ENV GOPATH /:/src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/vendor
 
-ADD . /src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapte
+ADD . /src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter
 RUN apt-get update -y && apt-get install gcc ca-certificates
 RUN make
 
