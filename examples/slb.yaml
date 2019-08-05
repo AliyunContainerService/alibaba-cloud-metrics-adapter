@@ -1,0 +1,23 @@
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: kubecon-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1beta2
+    kind: Deployment
+    name: nginx-deployment-basic
+  minReplicas: 5
+  maxReplicas: 10
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: slb_l7_status_2xx
+          selector:
+            matchLabels:
+              slb.instance.id: "lb-2xxxxxxxxxx"
+              slb.instance.port: "80"
+        target:
+          type: AverageValue
+          averageValue: 100m

@@ -4,18 +4,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/utils"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cms"
 	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
 	"k8s.io/apimachinery/pkg/labels"
 
+	"strconv"
+	"time"
+
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	log "k8s.io/klog"
 	"k8s.io/metrics/pkg/apis/external_metrics"
-	"time"
-	"strconv"
 )
 
 const (
@@ -126,19 +129,20 @@ func (sb *SLBMetricSource) Client() (client *cms.Client, err error) {
 		return nil, err
 	}
 
-	client, err = cms.NewClientWithAccessKey(accessUserInfo.Region, accessUserInfo.AccessKeyId, accessUserInfo.AccessKeySecret)
+	if strings.HasPrefix(accessUserInfo.AccessKeyId, "STS.") {
+		client, err = cms.NewClientWithStsToken(accessUserInfo.Region, accessUserInfo.AccessKeyId, accessUserInfo.AccessKeySecret, accessUserInfo.Token)
+	} else {
+		client, err = cms.NewClientWithAccessKey(accessUserInfo.Region, accessUserInfo.AccessKeyId, accessUserInfo.AccessKeySecret)
 
-	if err != nil {
-		log.Errorf("Failed to create slb client,because of %v", err)
-		return nil, err
 	}
-	return client, nil
+	return client, err
+
 }
 
 // Global params
 type SLBGlobalParams struct {
-	InstanceId string
-	Port       string
+	InstanceId string `json:"instanceId"`
+	Port       string `json:"port"`
 }
 
 //
@@ -166,13 +170,14 @@ func (sms *SLBMetricSource) getSLBMetrics(namespace, metric, externalMetric stri
 		return values, err
 	}
 
-	request := cms.CreateDescribeMetricDataRequest()
+	request := cms.CreateDescribeMetricListRequest()
 	request.Scheme = "https"
 	request.Namespace = namespace
 	request.MetricName = metric
 
-	startTime := time.Now().Add(time.Duration(params.Period) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
-	endTime := time.Now().Format(utils.DEFAULT_TIME_FORMAT)
+	//time range
+	startTime := time.Now().Add(time.Duration(params.Period) * (-6) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
+	endTime := time.Now().Add(time.Duration(params.Period) * (-1) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
 
 	request.StartTime = startTime
 	request.EndTime = endTime
@@ -183,7 +188,7 @@ func (sms *SLBMetricSource) getSLBMetrics(namespace, metric, externalMetric stri
 		return values, err
 	}
 	request.Dimensions = dimensions
-	response, err := client.DescribeMetricData(request)
+	response, err := client.DescribeMetricList(request)
 	if err != nil {
 		log.Errorf("Failed to get slb response,err: %v", err)
 		return values, err
@@ -277,5 +282,5 @@ func getMetricFromDataPoints(datapoints string) (value float64, err error) {
 		return 0, err
 	}
 
-	return points[0].Average, nil
+	return points[len(points)-1].Average, nil
 }

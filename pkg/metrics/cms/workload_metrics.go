@@ -1,21 +1,22 @@
 package cms
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
-	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/cms"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/utils"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/cms"
+	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	log "k8s.io/klog"
 	"k8s.io/metrics/pkg/apis/external_metrics"
-	"strconv"
-	"time"
-	"encoding/json"
-	"strings"
 )
 
 const (
@@ -34,14 +35,14 @@ const (
 )
 
 type DataPoint struct {
-	Timestamp int64
-	UserId    string
-	GroupId   string
-	Value     float64
-	Sum       float64
-	Average   float64
-	Maximum   float64
-	Minimum   float64
+	Timestamp int64 `json:"timestamp"`
+	UserId    string `json:"userId"`
+	GroupId   string `json:"groupId"`
+	Value     float64 `json:"value"`
+	Sum       float64 `json:"Sum"`
+	Average   float64 `json:"average"`
+	Maximum   float64 `json:"maximum"`
+	Minimum   float64 `json:"minimum"`
 }
 
 type CMSMetricParams struct {
@@ -74,7 +75,6 @@ func (cs *CMSMetricSource) getCMSWorkLoadMetrics(namespace string, requires labe
 	}
 
 	dataPoints, err := cs.getMetricListByGroupId(params, groupId, info.Metric)
-
 	if err != nil {
 		return values, err
 	}
@@ -83,7 +83,7 @@ func (cs *CMSMetricSource) getCMSWorkLoadMetrics(namespace string, requires labe
 		values = append(values, external_metrics.ExternalMetricValue{
 			MetricName: info.Metric,
 			Timestamp:  metav1.Now(),
-			Value:      *resource.NewQuantity(int64(dataPoints[len(dataPoints)-1].Value), resource.DecimalSI),
+			Value:      *resource.NewQuantity(int64(dataPoints[len(dataPoints)-1].Sum), resource.DecimalSI),
 		})
 	}
 	return values, err
@@ -177,8 +177,9 @@ func (cs *CMSMetricSource) getMetricListByGroupId(params *CMSMetricParams, group
 	request.Dimensions = dimensions
 
 	// time range
-	startTime := time.Now().Add(time.Duration(params.Period) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
-	endTime := time.Now().Format(utils.DEFAULT_TIME_FORMAT)
+	startTime:=time.Now().Add(time.Duration(params.Period)*(-6)*time.Second).Format(utils.DEFAULT_TIME_FORMAT)
+	endTime := time.Now().Add(time.Duration(params.Period)*(-1)*time.Second).Format(utils.DEFAULT_TIME_FORMAT)
+
 	request.StartTime = startTime
 	request.EndTime = endTime
 
@@ -195,7 +196,6 @@ func (cs *CMSMetricSource) getMetricListByGroupId(params *CMSMetricParams, group
 		log.Errorf("Failed to describe metric list,because of %v", err)
 		return
 	}
-
 	if response.Success {
 		dataPoint := response.Datapoints
 		if dataPoint == "" {
@@ -203,10 +203,12 @@ func (cs *CMSMetricSource) getMetricListByGroupId(params *CMSMetricParams, group
 		}
 
 		var res []DataPoint
+
 		err := json.Unmarshal([]byte(dataPoint), &res)
 		if err != nil {
 			return values, fmt.Errorf("json unmarshal datapoint exception %v", err)
 		}
+		return res,nil
 	}
 	return values, err
 }
