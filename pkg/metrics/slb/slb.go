@@ -41,7 +41,7 @@ const (
 
 	//Global Params
 	SLB_INSTANCE_ID = "slb.instance.id"
-	SLB_PORT        = "slb.port"
+	SLB_PORT        = "slb.instance.port"
 	SLB_PERIOD      = "slb.period"
 
 	MIN_PERIOD = 60
