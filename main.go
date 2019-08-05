@@ -13,6 +13,7 @@ import (
 )
 
 func main() {
+
 	logs.InitLogs()
 	defer logs.FlushLogs()
 
@@ -22,7 +23,7 @@ func main() {
 	}
 
 	cl := flag.NewFlagSet("external-metrics", flag.ErrorHandling(0))
-	log.InitFlags(cl)
+	//log.InitFlags(cl)
 	cmd := &basecmd.AdapterBase{}
 	cmd.Flags().AddGoFlagSet(cl)
 	cmd.Flags().Parse(os.Args)

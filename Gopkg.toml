@@ -54,6 +54,12 @@
   version = "v11.0.0"
   name = "k8s.io/client-go"
 
+
+[[override]]
+   branch = "master"
+   name = "github.com/golang/glog"
+   source = "github.com/ringtail/glog"
+
 [[override]]
   branch = "release-1.14"
   name = "k8s.io/apiserver"

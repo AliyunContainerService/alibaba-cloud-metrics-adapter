@@ -1,11 +1,18 @@
-FROM alpine:3.8
+FROM golang:1.12.6 AS build-env
 
-RUN apk update \
-    && apk add ca-certificates tzdata \
-    && rm -rf /var/cache/apk/* \
-    && update-ca-certificates
+WORKDIR /src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter
+ENV GOPATH /:/src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/vendor
 
-ADD alibaba-cloud-metrics-adapter /alibaba-cloud-metrics-adapter
+ADD . /src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapte
+RUN apt-get update -y && apt-get install gcc ca-certificates
+RUN make
+
+
+FROM alpine:3.10
+
+COPY --from=build-env /usr/local/go/lib/time/zoneinfo.zip /usr/local/go/lib/time/zoneinfo.zip
+COPY --from=build-env /src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/alibaba-cloud-metrics-adapter /
+COPY --from=build-env /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 RUN chmod +x /alibaba-cloud-metrics-adapter
 
