@@ -54,7 +54,7 @@ spec:
               k8s.workload.name: "demo"
         target:
           type: AverageValue
-          averageValue: 10m
+          averageValue: 0.6
 ```
 
 
