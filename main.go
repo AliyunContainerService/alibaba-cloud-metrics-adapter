@@ -51,7 +51,7 @@ func setupAlibabaCloudProvider(cmd *basecmd.AdapterBase) {
 
 	metricProvider, err := provider.NewAlibabaCloudProvider(mapper, dynamicClient)
 	if err != nil {
-		log.Fatal("Failed to setup Alibaba Cloud metrics provider: %v", err)
+		log.Fatal("Failed to setup Alibaba Cloud metrics provider:", err)
 	}
 	// TODO custom metrics will be supported later after multi custom adapter support.
 	//cmd.WithCustomMetrics(metricProvider)

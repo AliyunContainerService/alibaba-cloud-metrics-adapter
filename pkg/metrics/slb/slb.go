@@ -72,7 +72,7 @@ func (sb *SLBMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 	}
 	for _, metric := range MetricArray {
 		metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
-			metric,
+			Metric: metric,
 		})
 	}
 	return metricInfoList
@@ -261,8 +261,8 @@ func getSLBParams(requirements labels.Requirements) (params *SLBParams, err erro
 }
 
 type DataPoint struct {
-	timestamp int64   `json:"timestamp"`
-	vip       string  `json:"vip",omitempty`
+	Timestamp int64   `json:"timestamp"`
+	Vip       string  `json:"vip,omitempty"`
 	Average   float64 `json:"Average"`
 	Minimum   float64 `json:"Minimum"`
 	Maximum   float64 `json:"Maximum"`

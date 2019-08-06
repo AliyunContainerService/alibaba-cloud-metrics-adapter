@@ -25,7 +25,7 @@ const (
 	K8S_DEFAULT_WORKLOAD_TYPE = "deployment"
 
 	// params
-	K8S_NAMESPACE     = "k8s.namespace"
+	K8S_NAMESPACE     = "k8s.workload.namespace"
 	K8S_WORKLOAD_TYPE = "k8s.workload.type"
 	K8S_WORKLOAD_NAME = "k8s.workload.name"
 	K8S_CLUSTER_ID    = "k8s.cluster.id"
@@ -35,9 +35,9 @@ const (
 )
 
 type DataPoint struct {
-	Timestamp int64 `json:"timestamp"`
-	UserId    string `json:"userId"`
-	GroupId   string `json:"groupId"`
+	Timestamp int64   `json:"timestamp"`
+	UserId    string  `json:"userId"`
+	GroupId   string  `json:"groupId"`
 	Value     float64 `json:"value"`
 	Sum       float64 `json:"Sum"`
 	Average   float64 `json:"average"`
@@ -177,8 +177,8 @@ func (cs *CMSMetricSource) getMetricListByGroupId(params *CMSMetricParams, group
 	request.Dimensions = dimensions
 
 	// time range
-	startTime:=time.Now().Add(time.Duration(params.Period)*(-6)*time.Second).Format(utils.DEFAULT_TIME_FORMAT)
-	endTime := time.Now().Add(time.Duration(params.Period)*(-1)*time.Second).Format(utils.DEFAULT_TIME_FORMAT)
+	startTime := time.Now().Add(time.Duration(params.Period) * (-6) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
+	endTime := time.Now().Add(time.Duration(params.Period) * (-1) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
 
 	request.StartTime = startTime
 	request.EndTime = endTime
@@ -208,7 +208,7 @@ func (cs *CMSMetricSource) getMetricListByGroupId(params *CMSMetricParams, group
 		if err != nil {
 			return values, fmt.Errorf("json unmarshal datapoint exception %v", err)
 		}
-		return res,nil
+		return res, nil
 	}
 	return values, err
 }
