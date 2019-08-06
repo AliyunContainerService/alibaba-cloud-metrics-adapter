@@ -3,27 +3,26 @@
 #### Global Params 
 
 all metrics need the global params.
-* sls.project:  The project name of a SLS instance.
-* sls.logstore: The specific logStore of a SLS project.  
 
-optional params 
-* sls.ingress.route:    ingress route  
-* sls.query.period:     query interval seconds, min val 15s
-* sls.query.delay:      query delay seconds, default 0s
-* sls.query.retry:      max retry, default 5
+
+| global params       | description              | example            | required | 
+| ------------------- | ------------------------ | ------------------ | -------- | 
+| sls.project         | The project name of a SLS instance. | k8s-log-c550367cdf1e84dfabab013b277cc6bc2" | True | 
+| sls.logstore        | The specific logStore of a SLS project. | nginx-ingress  | True | 
+| sls.ingress.route   | route of ingress(namespace-svc-port)| default-kubecon-springboot-demo-6666 | True | 
  
 
 #### Metrics List 
 
-| metric name     | description                     |     
-| --------------- | ------------------------------- | 
-| sls_ingress_qps | QPS of a specific ingress route |
-| sls_ingress_latency_avg | latency of all requests |
-| sls_ingress_latency_p50 | latency of 50% requests|
-| sls_ingress_latency_p95 | latency of 95% requests |
-| sls_ingress_latency_p99 | latency of 99% requests |
-| sls_ingress_latency_p9999 | latency of 99.99% requests |
-| sls_ingress_inflow | inflow bandwidth of ingress |
+| metric name     | description                     | extra params |     
+| --------------- | ------------------------------- | ------------ |
+| sls_ingress_qps | QPS of a specific ingress route |  sls.ingress.route | 
+| sls_ingress_latency_avg | latency of all requests |  sls.ingress.route        | 
+| sls_ingress_latency_p50 | latency of 50% requests|  sls.ingress.route        | 
+| sls_ingress_latency_p95 | latency of 95% requests |  sls.ingress.route        | 
+| sls_ingress_latency_p99 | latency of 99% requests |  sls.ingress.route        | 
+| sls_ingress_latency_p9999 | latency of 99.99% requests |  sls.ingress.route        | 
+| sls_ingress_inflow | inflow bandwidth of ingress |  sls.ingress.route        | 
 
 #### Demo  
 ```

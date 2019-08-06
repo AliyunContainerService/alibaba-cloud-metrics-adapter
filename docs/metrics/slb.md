@@ -4,8 +4,10 @@
 
 all metrics need the global params.
 
-- slb.instance.id: The ID of a SLB instance.
-- slb.instance.port：The port of SLB instance.
+| global params       | description              | example            | required | 
+| ------------------- | ------------------------ | ------------------ | -------- | 
+| slb.instance.id     | The ID of a SLB instance.| lb-2zelc9ml3tr1cnsir6ep2 | True | 
+| slb.instance.port   | The port of SLB instance.| 80                 | True | 
 
 #### Metrics List
 

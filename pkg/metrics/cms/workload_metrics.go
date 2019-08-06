@@ -22,7 +22,7 @@ import (
 const (
 	// global const
 	DEFAULT_ACS_KUBERNETES    = "acs_kubernetes"
-	K8S_DEFAULT_WORKLOAD_TYPE = "deployment"
+	K8S_DEFAULT_WORKLOAD_TYPE = "Deployment"
 
 	// params
 	K8S_NAMESPACE     = "k8s.workload.namespace"

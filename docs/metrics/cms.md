@@ -1,14 +1,14 @@
-## SLB External metrics
+## CMS(k8s) External metrics
 
 #### Global Params
-
 all metrics need the global params.
-- k8s.cluster.id: the cluster id of Aliyun Container Service.
-- k8s.workload.type: kind of reference Object.
-- k8s.workload.name: name of reference Object.
 
-optional params
-- k8s.period：interval of fetched metrics.
+| global params       | description              | example            | required | 
+| ------------------- | ------------------------ | ------------------ | -------- | 
+| k8s.cluster.id      | the cluster id of Aliyun Container Service. | c7689a1dcf77c42a3b26114f851fa8fef | True | 
+| k8s.workload.type   | kind of reference Object.| Deployment(default value)| False | 
+| k8s.workload.namespace| namespace of reference Object. | default (default value) | False | 
+| k8s.workload.name   | name of reference Object | demo | True | 
 
 #### Metrics List
 
@@ -49,9 +49,9 @@ spec:
           name: k8s_workload_cpu_util
           selector:
             matchLabels:
-              k8s.cluster.id: "xxx"
+              k8s.cluster.id: "c7689a1dcf77c42a3b26114f851fa8fef"
               k8s.workload.type: "Deployment"
-              k8s.workload.name: "xxx"
+              k8s.workload.name: "demo"
         target:
           type: AverageValue
           averageValue: 10m
