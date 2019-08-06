@@ -55,7 +55,7 @@ spec:
               slb.instance.port: "80"
         target:
           type: AverageValue
-          averageValue: 100m
+          averageValue: 20
 ```
 
 
