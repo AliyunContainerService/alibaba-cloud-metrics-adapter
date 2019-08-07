@@ -1,4 +1,8 @@
-## alibaba-cloud-metrics-adapter [Not officially released]
+## alibaba-cloud-metrics-adapter 
+
+[![License](https://img.shields.io/badge/license-Apache%202-4EB1BA.svg)](https://www.apache.org/licenses/LICENSE-2.0.html)
+[![Build Status](https://travis-ci.org/AliyunContainerService/alibaba-cloud-metrics-adapter.svg?branch=master)](https://travis-ci.org/AliyunContainerService/alibaba-cloud-metrics-adapter)
+
 
 ###  Overview 
 An implementation of the Kubernetes [Custom Metrics API and External Metrics API](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#support-for-metrics-apis) for Alibaba Cloud.This adapter enables you to scale your application pods running on ACK using the Horizontal Pod Autoscaler (HPA) with External Metrics such as ingress QPS, ARMS jvm RT and so on.
