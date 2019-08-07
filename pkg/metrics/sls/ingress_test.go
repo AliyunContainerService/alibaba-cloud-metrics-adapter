@@ -2,8 +2,8 @@ package sls
 
 import (
 	"fmt"
-	"testing"
 	"k8s.io/apimachinery/pkg/labels"
+	"testing"
 )
 
 func TestInvalidGetSLSParams(t *testing.T) {
@@ -29,7 +29,7 @@ func TestIngressQuery(t *testing.T) {
 		SLSGlobalParams: SLSGlobalParams{
 			Interval:     60,
 			DelaySeconds: 5,
-			MaxRetry:       5,
+			MaxRetry:     5,
 		},
 		Route: "default-svc-80",
 	}

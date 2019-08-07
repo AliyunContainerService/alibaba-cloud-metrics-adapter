@@ -113,7 +113,7 @@ func (cs *CMSMetricSource) GetExternalMetric(info p.ExternalMetricInfo, namespac
 	return values, err
 }
 
-// register cms metric source to provider 
+// register cms metric source to provider
 func NewCMSMetricSource() *CMSMetricSource {
 	return &CMSMetricSource{}
 }

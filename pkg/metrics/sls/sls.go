@@ -1,15 +1,15 @@
 package sls
 
 import (
-	"fmt"
 	"errors"
-	"strconv"
+	"fmt"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/utils"
 	"github.com/aliyun/aliyun-log-go-sdk"
 	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
 	"k8s.io/apimachinery/pkg/labels"
 	log "k8s.io/klog"
 	"k8s.io/metrics/pkg/apis/external_metrics"
+	"strconv"
 )
 
 const (
