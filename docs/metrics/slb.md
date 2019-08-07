@@ -95,7 +95,6 @@ spec:
         target:
           type: Value
           value: 100
-
 ```
 
 
