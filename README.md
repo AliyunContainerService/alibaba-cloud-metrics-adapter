@@ -105,7 +105,7 @@ Events:
   Normal  SuccessfulRescale  10s   horizontal-pod-autoscaler  New size: 8; reason: external metric sls_ingress_qps(&LabelSelector{MatchLabels:map[string]string{sls.ingress.route: default-nginx-80,sls.logstore: nginx-ingress,sls.project: k8s-log-c550367cdf1e84dfabab013b277cc6bc2,},MatchExpressions:[],}) above target
 ```
 
-### Cloud Resource Metrics   
+### Cloud Resource Metrics List
 * <a href="docs/metrics/sls.md">Ingress（SLS)</a>
 * <a href="docs/metrics/slb.md">SLB</a>
 * <a href="docs/metrics/cms.md">CMS</a>
