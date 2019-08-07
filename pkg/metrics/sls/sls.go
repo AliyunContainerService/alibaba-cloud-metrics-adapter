@@ -96,7 +96,7 @@ func getSLSParams(requirements labels.Requirements) (params *SLSIngressParams, e
 		SLSGlobalParams: SLSGlobalParams{
 			Interval:     MIN_INTERVAL,
 			MaxRetry:     MAX_RETRY_DEFAULT,
-			DelaySeconds: 0,
+			DelaySeconds: 10,
 		},
 	}
 	for _, r := range requirements {

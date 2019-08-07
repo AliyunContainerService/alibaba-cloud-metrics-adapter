@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	log "k8s.io/klog"
 	"k8s.io/metrics/pkg/apis/external_metrics"
+	"regexp"
 )
 
 type QPSResponse struct {
@@ -30,21 +31,21 @@ func (ss *SLSMetricSource) getSLSIngressQuery(params *SLSIngressParams, metricNa
 	now := time.Now().Unix()
 	queryRealBegin := now - int64(params.DelaySeconds) - int64(params.Interval)
 	end = now - int64(params.DelaySeconds)
-	begin = begin - begin%60 // Align by minute
+	begin = now - 100
 	var queryItem string
 	switch metricName {
 	case SLS_INGRESS_QPS:
 		queryItem = fmt.Sprintf("count(1) / %d", params.Interval)
 	case SLS_INGRESS_LATENCY_AVG:
-		queryItem = "avg(request_time) * 1000000"
+		queryItem = "avg(request_time) * 1000"
 	case SLS_INGRESS_LATENCY_P50:
-		queryItem = "approx_percentile(request_time, 0.50) * 1000000"
+		queryItem = "approx_percentile(request_time, 0.50) * 1000"
 	case SLS_INGRESS_LATENCY_P95:
-		queryItem = "approx_percentile(request_time, 0.95) * 1000000"
+		queryItem = "approx_percentile(request_time, 0.95) * 1000"
 	case SLS_INGRESS_LATENCY_P9999:
-		queryItem = "approx_percentile(request_time, 0.9999) * 1000000"
+		queryItem = "approx_percentile(request_time, 0.9999) * 1000"
 	case SLS_INGRESS_LATENCY_P99:
-		queryItem = "approx_percentile(request_time, 0.99) * 1000000"
+		queryItem = "approx_percentile(request_time, 0.99) * 1000"
 	case SLS_INGRESS_INFLOW:
 		queryItem = fmt.Sprintf("sum(request_length) / %d", params.Interval)
 	default:
@@ -88,7 +89,22 @@ func (ss *SLSMetricSource) getSLSIngressMetrics(namespace string, requirements l
 			continue
 		}
 
-		val, err := strconv.Atoi(queryRsp.Logs[0]["value"])
+		value := queryRsp.Logs[0]["value"]
+		var valid = regexp.MustCompile("[0-9.]")
+		array := valid.FindAllStringSubmatch(value, -1)
+
+		valStr := ""
+		for _, i := range array {
+			if len(i) == 1 {
+				valStr += i[0]
+			}
+		}
+
+		if valStr == "" {
+			valStr = "0"
+		}
+
+		val, err := strconv.ParseFloat(valStr, 64)
 
 		if err != nil {
 			return values, err

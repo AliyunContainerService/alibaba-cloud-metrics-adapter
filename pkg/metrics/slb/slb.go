@@ -176,8 +176,8 @@ func (sms *SLBMetricSource) getSLBMetrics(namespace, metric, externalMetric stri
 	request.MetricName = metric
 
 	//time range
-	startTime := time.Now().Add(time.Duration(params.Period) * (-6) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
-	endTime := time.Now().Add(time.Duration(params.Period) * (-1) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
+	startTime := time.Now().Add(-5 * time.Duration(params.Period) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
+	endTime := time.Now().Format(utils.DEFAULT_TIME_FORMAT)
 
 	request.StartTime = startTime
 	request.EndTime = endTime
@@ -201,7 +201,7 @@ func (sms *SLBMetricSource) getSLBMetrics(namespace, metric, externalMetric stri
 	}
 	values = append(values, external_metrics.ExternalMetricValue{
 		MetricName: externalMetric,
-		Value:      *resource.NewMilliQuantity(int64(metricValue), resource.DecimalSI),
+		Value:      *resource.NewQuantity(int64(metricValue), resource.DecimalSI),
 		Timestamp:  metav1.Now(),
 	})
 	return values, nil

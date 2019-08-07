@@ -31,12 +31,49 @@ all metrics need the global params.
 | slb_l7_upstream_rt            | Upstream service rt                       | None         |
 
 #### Demo
-
 ```yaml
+apiVersion: apps/v1beta2 # for versions before 1.8.0 use apps/v1beta1
+kind: Deployment
+metadata:
+  name: nginx-deployment-basic
+  labels:
+    app: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9 # replace it with your exactly <image_name:tags>
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  namespace: default
+spec:
+  externalTrafficPolicy: Local
+  ports:
+    - port: 80
+      protocol: TCP
+      targetPort: 80
+  selector:
+    app: nginx
+  sessionAffinity: None
+  type: LoadBalancer
+---
 apiVersion: autoscaling/v2beta2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: kubecon-hpa
+  name: slb-hpa
 spec:
   scaleTargetRef:
     apiVersion: apps/v1beta2
@@ -48,14 +85,17 @@ spec:
     - type: External
       external:
         metric:
-          name: slb_l7_status_2xx
+          name: slb_l4_active_connection
           selector:
             matchLabels:
-              slb.instance.id: "lb-2zedu6pk8bryv2z4hnrif"
-              slb.instance.port: "80"
+              # slb.instance.id: "lb-2ze2locy5fk8at1cfx47y"
+              slb.instance.id: ""
+              # slb.instance.port: "80"
+              slb.instance.port: ""
         target:
-          type: AverageValue
-          averageValue: 100m
+          type: Value
+          value: 100
+
 ```
 
 

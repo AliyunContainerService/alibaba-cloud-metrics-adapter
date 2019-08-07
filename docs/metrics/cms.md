@@ -30,6 +30,28 @@ all metrics need the global params.
 #### Demo
 
 ```yaml
+apiVersion: apps/v1beta2 # for versions before 1.8.0 use apps/v1beta1
+kind: Deployment
+metadata:
+  name: nginx-deployment-basic
+  labels:
+    app: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9 # replace it with your exactly <image_name:tags>
+        ports:
+        - containerPort: 80
+---
 apiVersion: autoscaling/v2beta2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -49,12 +71,13 @@ spec:
           name: k8s_workload_cpu_util
           selector:
             matchLabels:
-              k8s.cluster.id: "c7689a1dcf77c42a3b26114f851fa8fef"
-              k8s.workload.type: "Deployment"
-              k8s.workload.name: "demo"
+              # k8s.cluster.id: "c550367cdf1e84dfabab013b277cc6bc2"
+              k8s.cluster.id: ""
+              # k8s.workload.name: "nginx-deployment-basic"
+              k8s.workload.name: ""
         target:
-          type: AverageValue
-          averageValue: 10m
+          type: Value
+          value: 60
 ```
 
 
