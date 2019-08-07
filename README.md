@@ -18,7 +18,8 @@ Here is an example about HPA base on Ingress QPS metric. Ingress Controller(Ngin
 [switch on Ingress Dashboard](https://www.alibabacloud.com/help/doc-detail/86532.html?spm=a2c5t.11065259.1996646101.searchclickresult.2f0570acygCy4j)     
 
 <img src="docs/images/dashboard.png"/>
-##### step2: deploy the workload and configure hpa with appropriate parameters
+##### step2: deploy the workload and configure hpa with appropriate parameters     
+
 ```yaml
 apiVersion: autoscaling/v2beta2
 kind: HorizontalPodAutoscaler
@@ -66,12 +67,16 @@ spec:
           type: Value
           # sls_ingress_latency_p9999 > 10ms
           value: 10
-```
-Fill the blank in matchLabels with the metadata of your cluster and deploy the yaml file.
+```     
+
+Fill the blank in matchLabels with the metadata of your cluster and deploy the yaml file.     
+
 ```
 kubectl apply -f examples/sls.yaml 
-```
-##### step3: check the result 
+```    
+
+##### step3: check the result     
+
 ```
 Name:                                          ingress-hpa
 Namespace:                                     default
