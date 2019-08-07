@@ -12,17 +12,20 @@ An implementation of the Kubernetes [Custom Metrics API and External Metrics API
 kubectl apply -f deploy/deploy.yaml 
 ```
 ### Example 
-HPA with external metric (sls_ingress_qps)
-```$xslt
+Here is an example about HPA base on Ingress QPS metric. Ingress Controller(Nginx) is a common gateway solution in kubernetes. How to autoscale your workload based on Ingress route QPS gets everyone's attention. If we collect metric in Ingress Controller that might consume too much performance. So we collect Ingress log to SLS (Log Service),analysis and make up metrics such as sls_ingress_qps,sls_ingress_latency_avg and so on. The external metrics can help developers from a different angle.
+
+##### step1: create a ack cluster with SLS integratation on 
+##### step2: deploy the workload and configure hpa with appropriate parameters
+```yaml
 apiVersion: autoscaling/v2beta2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: kubecon-hpa
+  name: ingress-hpa
 spec:
   scaleTargetRef:
     apiVersion: apps/v1beta2
     kind: Deployment
-    name: kubecon-springboot-demo
+    name: nginx-deployment-basic
   minReplicas: 2
   maxReplicas: 10
   metrics:
@@ -32,18 +35,64 @@ spec:
           name: sls_ingress_qps
           selector:
             matchLabels:
-              sls.project: "k8s-log-c550367cdf1e84dfabab013b277cc6bc2"
-              sls.logStore: "nginx-ingress"
-              sls.ingress.route: "default-kubecon-springboot-demo-6666"
+              #sls.project: "k8s-log-c550367cdf1e84dfabab013b277cc6bc2"
+              sls.project: ""
+              #sls.logstore: "nginx-ingress"
+              sls.logstore: ""
+              #sls.ingress.route: "default-nginx-80"
+              sls.ingress.route: ""
         target:
           type: AverageValue
           averageValue: 10
+    - type: External
+      external:
+        metric:
+          name: sls_ingress_latency_p9999
+          selector:
+            matchLabels:
+              # default ingress log project is k8s-log-clusterId
+              # such as: sls.project: "k8s-log-c550367cdf1e84dfabab013b277cc6bc2"
+              sls.project: ""
+              # default ingress logstre is nginx-ingress
+              # such as: sls.logstore: "nginx-ingress"
+              sls.logstore: ""
+              # namespace-svc-port
+              # such as: sls.ingress.route: "default-nginx-80"
+              sls.ingress.route: ""
+        target:
+          type: Value
+          # sls_ingress_latency_p9999 > 10ms
+          value: 10
 ```
-setup stress engine and watch the hpa output.
-
-```$xslt
-NAME          REFERENCE                            TARGETS      MINPODS   MAXPODS   REPLICAS   AGE
-kubecon-hpa   Deployment/kubecon-springboot-demo   120/10 (avg)   2         10        8          6m3s
+Fill the blank in matchLabels with the metadata of your cluster and deploy the yaml file.
+```
+kubectl apply -f examples/sls.yaml 
+```
+##### step3: check the result 
+```
+Name:                                          ingress-hpa
+Namespace:                                     default
+Labels:                                        <none>
+Annotations:                                   <none>
+CreationTimestamp:                             Wed, 07 Aug 2019 20:03:56 +0800
+Reference:                                     Deployment/nginx-deployment-basic
+Metrics:                                       ( current / target )
+  "sls_ingress_qps" (target average value):    7875m / 10
+  "sls_ingress_latency_p9999" (target value):  10 / 10
+Min replicas:                                  2
+Max replicas:                                  10
+Deployment pods:                               8 current / 8 desired
+Conditions:
+  Type            Status  Reason              Message
+  ----            ------  ------              -------
+  AbleToScale     True    ReadyForNewScale    recommended size matches current size
+  ScalingActive   True    ValidMetricFound    the HPA was able to successfully calculate a replica count from external metric sls_ingress_latency_p9999(&LabelSelector{MatchLabels:map[string]string{sls.ingress.route: default-nginx-80,sls.logstore: nginx-ingress,sls.project: k8s-log-c550367cdf1e84dfabab013b277cc6bc2,},MatchExpressions:[],})
+  ScalingLimited  False   DesiredWithinRange  the desired count is within the acceptable range
+Events:
+  Type    Reason             Age   From                       Message
+  ----    ------             ----  ----                       -------
+  Normal  SuccessfulRescale  16s   horizontal-pod-autoscaler  New size: 4; reason: external metric sls_ingress_qps(&LabelSelector{MatchLabels:map[string]string{sls.ingress.route: default-nginx-80,sls.logstore: nginx-ingress,sls.project: k8s-log-c550367cdf1e84dfabab013b277cc6bc2,},MatchExpressions:[],}) above target
+  Normal  SuccessfulRescale  10s   horizontal-pod-autoscaler  New size: 8; reason: external metric sls_ingress_qps(&LabelSelector{MatchLabels:map[string]string{sls.ingress.route: default-nginx-80,sls.logstore: nginx-ingress,sls.project: k8s-log-c550367cdf1e84dfabab013b277cc6bc2,},MatchExpressions:[],}) above target
 ```
 
 ### Cloud Resource Metrics   
