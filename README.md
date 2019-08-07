@@ -14,11 +14,11 @@ kubectl apply -f deploy/deploy.yaml
 ### Example 
 Here is an example about HPA base on Ingress QPS metric. Ingress Controller(Nginx) is a common gateway solution in kubernetes. How to autoscale your workload based on Ingress route QPS gets everyone's attention. If we collect metric in Ingress Controller that might consume too much performance. So we collect Ingress log to SLS (Log Service),analysis and make up metrics such as sls_ingress_qps,sls_ingress_latency_avg and so on. The external metrics can help developers from a different angle.
 
-##### step1: create a ack cluster with SLS integratation on 
+#### step1: create a ack cluster with SLS integratation on 
 [switch on Ingress Dashboard](https://www.alibabacloud.com/help/doc-detail/86532.html?spm=a2c5t.11065259.1996646101.searchclickresult.2f0570acygCy4j)     
 
 <img src="docs/images/dashboard.png"/>
-##### step2: deploy the workload and configure hpa with appropriate parameters     
+#### step2: deploy the workload and configure hpa with appropriate parameters     
 
 ```yaml
 apiVersion: autoscaling/v2beta2
@@ -75,7 +75,7 @@ Fill the blank in matchLabels with the metadata of your cluster and deploy the y
 kubectl apply -f examples/sls.yaml 
 ```    
 
-##### step3: check the result     
+#### step3: check the result     
 
 ```
 Name:                                          ingress-hpa
