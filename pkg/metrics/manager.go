@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"fmt"
+	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/ahas"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/cms"
 
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/slb"
@@ -23,6 +24,7 @@ func init() {
 	register(sls.NewSLSMetricSource())
 	register(slb.NewSLBMetricSource())
 	register(cms.NewCMSMetricSource())
+	register(ahas.NewAHASSentinelMetricSource())
 }
 
 func GetExternalMetricsManager() *ExternalMetricsManager {
