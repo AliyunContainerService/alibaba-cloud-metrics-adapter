@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	ahas "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/ahas/openapi"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/utils"
+	ahas "github.com/aliyun/aliyun-ahas-go-sdk"
 	"github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
 	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -24,9 +24,11 @@ const (
 	AHAS_SENTINEL_BLOCK_QPS = "ahas_sentinel_block_qps"
 	AHAS_SENTINEL_AVG_RT    = "ahas_sentinel_avg_rt"
 
-	AHAS_SENTINEL_APP_NAME    = "ahas.sentinel.app.name"
-	AHAS_SENTINEL_NAMESPACE   = "ahas.sentinel.namespace"
-	AHAS_SENTINEL_STAT_PERIOD = "ahas.sentinel.stat.period"
+	AHAS_SENTINEL_APP_NAME       = "ahas.sentinel.app"
+	AHAS_SENTINEL_NAMESPACE      = "ahas.sentinel.namespace"
+	AHAS_SENTINEL_QUERY_INTERVAL = "ahas.sentinel.interval"
+
+	DEFAULT_QUERY_INTERVAL = 10
 )
 
 type AHASSentinelMetricSource struct{}
@@ -131,7 +133,7 @@ func getAhasSentinelParams(requirements labels.Requirements) (params *AHASSentin
 			params.AppName = value
 		case AHAS_SENTINEL_NAMESPACE:
 			params.AhasNamespace = value
-		case AHAS_SENTINEL_STAT_PERIOD:
+		case AHAS_SENTINEL_QUERY_INTERVAL:
 			if params.Interval, err = strconv.Atoi(value); err != nil {
 				log.Errorf("Failed to parse statistic interval and skip, cause: %v", err)
 				continue
@@ -145,9 +147,11 @@ func getAhasSentinelParams(requirements labels.Requirements) (params *AHASSentin
 		params.AhasNamespace = "default"
 	}
 
-	if params.Interval < 1 {
-		log.Warningf("The statistic interval you specific is too low and use 1s as default")
-		params.Interval = 1
+	if params.Interval <= 0 {
+		if params.Interval < 0 {
+			log.Warningf("The statistic interval you specific is too low and use 10s as default")
+		}
+		params.Interval = DEFAULT_QUERY_INTERVAL
 	}
 
 	return params, nil
