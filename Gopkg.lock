@@ -26,7 +26,7 @@
   revision = "de5bf2ad457846296e2031421a34e2568e304e35"
 
 [[projects]]
-  digest = "1:219f7b41ff7dc3b95808887e9c7dd7a13a7be9e92a83ea9e5b5a6d9254854ef3"
+  digest = "1:a0ef9764f0bfab8517d8a960b970b149b870f07be9a4743cdfb088ced0af58ea"
   name = "github.com/aliyun/alibaba-cloud-sdk-go"
   packages = [
     "sdk",
@@ -39,11 +39,12 @@
     "sdk/requests",
     "sdk/responses",
     "sdk/utils",
+    "services/ahas_openapi",
     "services/cms",
   ]
   pruneopts = ""
-  revision = "0f87a8a69ca7752e85e92ada7ebe62c130494253"
-  version = "1.60.85"
+  revision = "bfae93dba32329eac8ce6a959924321c08a36d5f"
+  version = "1.60.162"
 
 [[projects]]
   digest = "1:87f5cbf1c1f5d959a5bf64f0e77b81f8df89c000ddf02b30b310a92527960a22"
@@ -272,11 +273,12 @@
   version = "v0.3.7"
 
 [[projects]]
-  digest = "1:13fe471d0ed891e8544eddfeeb0471fd3c9f2015609a1c000aefdedf52a19d40"
+  digest = "1:e6f0b9e4dced4b6b5fedb810e2125a9f74dfe2ef1598c55ecb25e8b3d8f514ea"
   name = "github.com/jmespath/go-jmespath"
   packages = ["."]
   pruneopts = ""
-  revision = "c2b33e84"
+  revision = "3433f3ea46d9f8019119e7dd41274e112a2359a9"
+  version = "0.2.2"
 
 [[projects]]
   digest = "1:e716a02584d94519e2ccf7ac461c4028da736d41a58c1ed95e641c1603bdb056"
@@ -1055,6 +1057,7 @@
   analyzer-version = 1
   input-imports = [
     "github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests",
+    "github.com/aliyun/alibaba-cloud-sdk-go/services/ahas_openapi",
     "github.com/aliyun/alibaba-cloud-sdk-go/services/cms",
     "github.com/aliyun/aliyun-log-go-sdk",
     "github.com/denverdino/aliyungo/metadata",

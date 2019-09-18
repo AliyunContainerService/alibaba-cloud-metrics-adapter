@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/utils"
-	ahas "github.com/aliyun/aliyun-ahas-go-sdk"
+	ahas "github.com/aliyun/alibaba-cloud-sdk-go/services/ahas_openapi"
 	"github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
 	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
 	"k8s.io/apimachinery/pkg/api/resource"
