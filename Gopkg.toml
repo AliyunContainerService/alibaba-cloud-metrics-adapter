@@ -40,6 +40,9 @@
   version = "0.1.2"
   name = "github.com/aliyun/aliyun-log-go-sdk"
 
+[[constraint]]
+   revision = "7f3f78098e60423174ebfd887318a1624ff0b319"
+   name = "github.com/aliyun/alibaba-cloud-sdk-go"
 
 [[constraint]]
   revision = "4a014e695db52bb90e116f51b4f0df98900fd0db"
@@ -91,3 +94,7 @@
 [[override]]
   name = "github.com/prometheus/client_golang"
   revision = "505eaef017263e299324067d40ca2c48f6a2cf50"
+
+[prune]
+  go-tests = true
+  unused-packages = true
