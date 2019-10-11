@@ -8,7 +8,7 @@ import (
 
 func TestInvalidGetAhasSentinelParams(t *testing.T) {
 	r := make([]labels.Requirement, 0)
-	_, e := getAhasSentinelParams(r)
+	_, e := getAhasSentinelParams(r, "")
 	if e != nil {
 		t.Log("pass TestInvalidGetAhasSentinelParams")
 		return
@@ -23,7 +23,7 @@ func TestValidGetAhasSentinelParams(t *testing.T) {
 		t.Fatalf("new requirement err: %v", e)
 	}
 	r = append(r, *requirement)
-	params, e := getAhasSentinelParams(r)
+	params, e := getAhasSentinelParams(r, "")
 	if e == nil && params.AppName == "sentinel-console" {
 		t.Logf("Pass TestValidGetAhasSentinelParams")
 	} else {

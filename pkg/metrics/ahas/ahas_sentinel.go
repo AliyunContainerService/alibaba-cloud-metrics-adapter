@@ -50,7 +50,7 @@ func (s *AHASSentinelMetricSource) GetExternalMetricInfoList() []provider.Extern
 }
 
 func (s *AHASSentinelMetricSource) GetExternalMetric(info provider.ExternalMetricInfo, namespace string, requirements labels.Requirements) (values []external_metrics.ExternalMetricValue, err error) {
-	params, err := getAhasSentinelParams(requirements)
+	params, err := getAhasSentinelParams(requirements, namespace)
 	if err != nil {
 		return values, fmt.Errorf("failed to get AHAS Sentinel params, cause: %v", err)
 	}
@@ -86,15 +86,24 @@ func (s *AHASSentinelMetricSource) GetExternalMetric(info provider.ExternalMetri
 func resolveMetric(info provider.ExternalMetricInfo, response *ahas.GetSentinelAppSumMetricResponse) float64 {
 	switch info.Metric {
 	case AHAS_SENTINEL_TOTAL_QPS:
-		return response.MetricData.TotalCount
+		return handleMetricAvg(response.MetricData.TotalCount, response)
 	case AHAS_SENTINEL_PASS_QPS:
-		return response.MetricData.PassCount
+		return handleMetricAvg(response.MetricData.PassCount, response)
 	case AHAS_SENTINEL_BLOCK_QPS:
-		return response.MetricData.BlockCount
+		return handleMetricAvg(response.MetricData.BlockCount, response)
 	case AHAS_SENTINEL_AVG_RT:
 		return response.MetricData.AvgRt
 	default:
 		return 0
+	}
+}
+
+func handleMetricAvg(count float64, response *ahas.GetSentinelAppSumMetricResponse) float64 {
+	mc := response.MetricData.MachineCount
+	if mc <= 0 {
+		return 0
+	} else {
+		return count / float64(mc)
 	}
 }
 
@@ -118,7 +127,7 @@ type AHASSentinelParams struct {
 	AHASSentinelGlobalParams
 }
 
-func getAhasSentinelParams(requirements labels.Requirements) (params *AHASSentinelParams, err error) {
+func getAhasSentinelParams(requirements labels.Requirements, k8sNamespace string) (params *AHASSentinelParams, err error) {
 	params = &AHASSentinelParams{}
 	for _, r := range requirements {
 
@@ -140,8 +149,20 @@ func getAhasSentinelParams(requirements labels.Requirements) (params *AHASSentin
 			}
 		}
 	}
-	if params.AppName == "" {
-		return params, errors.New("Sentinel appName is required")
+	if len(params.AppName) <= 0 {
+		// try to get Sentinel appName from pilot annotation.
+		pilotMetadata, err := getPilotAnnotationMetadata(k8sNamespace)
+		if err != nil {
+			return params, err
+		}
+		if len(pilotMetadata.appName) <= 0 {
+			return params, errors.New("appName in AHAS Sentinel is required")
+		}
+		// apply the configuration from pilot annotation.
+		params.AppName = pilotMetadata.appName
+		if len(params.AhasNamespace) <= 0 && len(pilotMetadata.namespace) > 0 {
+			params.AhasNamespace = pilotMetadata.namespace
+		}
 	}
 	if params.AhasNamespace == "" {
 		params.AhasNamespace = "default"

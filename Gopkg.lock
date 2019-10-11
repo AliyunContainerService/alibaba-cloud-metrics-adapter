@@ -26,7 +26,7 @@
   revision = "de5bf2ad457846296e2031421a34e2568e304e35"
 
 [[projects]]
-  digest = "1:fe34286169fb13fad456ef0ab4deb473d291e252b7716eb5c6888480955bfae7"
+  digest = "1:8d072343887cf9fbc668f8abc0f806db3d6e010bbcd554221f00e6db44e632b2"
   name = "github.com/aliyun/alibaba-cloud-sdk-go"
   packages = [
     "sdk",
@@ -43,7 +43,7 @@
     "services/cms",
   ]
   pruneopts = "UT"
-  revision = "7f3f78098e60423174ebfd887318a1624ff0b319"
+  revision = "e12a36812fc2913bde902039b9a5ebeba6c012a6"
 
 [[projects]]
   digest = "1:d2bcba229754e28dabd8eb793a56227d4784d6e985ee8d26aa6059c47b383549"
@@ -1068,6 +1068,8 @@
     "k8s.io/apimachinery/pkg/labels",
     "k8s.io/apimachinery/pkg/types",
     "k8s.io/client-go/dynamic",
+    "k8s.io/client-go/kubernetes",
+    "k8s.io/client-go/rest",
     "k8s.io/component-base/logs",
     "k8s.io/klog",
     "k8s.io/metrics/pkg/apis/custom_metrics",

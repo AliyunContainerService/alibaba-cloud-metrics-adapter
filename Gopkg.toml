@@ -41,7 +41,7 @@
   name = "github.com/aliyun/aliyun-log-go-sdk"
 
 [[constraint]]
-   revision = "7f3f78098e60423174ebfd887318a1624ff0b319"
+   revision = "e12a36812fc2913bde902039b9a5ebeba6c012a6"
    name = "github.com/aliyun/alibaba-cloud-sdk-go"
 
 [[constraint]]
