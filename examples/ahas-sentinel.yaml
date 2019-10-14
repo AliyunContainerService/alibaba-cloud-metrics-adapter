@@ -33,6 +33,7 @@ spec:
       labels:
         name: agent-foo-on-pilot
       annotations:
+        ahasPilotAutoEnable: "on"
         ahasAppName: "foo-service-on-pilot"
         ahasNamespace: "default"
     spec:
@@ -78,7 +79,7 @@ spec:
     - port: 80
       targetPort: 8700
   selector:
-    name: foo-service
+    name: agent-foo-on-pilot
   type: LoadBalancer
   externalTrafficPolicy: Local
 ---
@@ -91,19 +92,18 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1beta2
     kind: Deployment
-    name: foo-service
+    name: agent-foo-on-pilot
   minReplicas: 1
   maxReplicas: 3
   metrics:
     - type: External
       external:
         metric:
-          name: agent-foo-on-pilot
+          name: ahas_sentinel_total_qps
           selector:
             matchLabels:
             # If you're using AHAS Sentinel pilot, then the appName and namespace
-            # can be retrieved from the annotation pf target Deployment automatically.
-
+            # can be retrieved from the annotation of target Deployment automatically.
             # ahas.sentinel.app: "foo-service-on-pilot"
             # ahas.sentinel.namespace: "default"
         target:
