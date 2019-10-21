@@ -35,13 +35,12 @@
 #  name = "github.com/x/y"
 #  version = "2.4.0"
 
-
 [[constraint]]
   version = "0.1.2"
   name = "github.com/aliyun/aliyun-log-go-sdk"
 
 [[constraint]]
-   revision = "7f3f78098e60423174ebfd887318a1624ff0b319"
+   revision = "e12a36812fc2913bde902039b9a5ebeba6c012a6"
    name = "github.com/aliyun/alibaba-cloud-sdk-go"
 
 [[constraint]]
@@ -56,6 +55,8 @@
 [[constraint]]
   version = "v11.0.0"
   name = "k8s.io/client-go"
+
+
 
 
 [[override]]
@@ -94,6 +95,10 @@
 [[override]]
   name = "github.com/prometheus/client_golang"
   revision = "505eaef017263e299324067d40ca2c48f6a2cf50"
+
+[[override]]
+  name = "github.com/coreos/etcd"
+  revision = "27fc7e2296f506182f58ce846e48f36b34fe6842"
 
 [prune]
   go-tests = true

@@ -25,21 +25,25 @@ var (
 	}
 )
 
+
 func retryReadErrorCheck(ctx context.Context, err error) (bool, error) {
 	if err == nil {
 		return false, nil
 	}
-
 	switch e := err.(type) {
 	case *url.Error:
 		return true, e
 	case *Error:
-		if e.HTTPCode >= 500 && e.HTTPCode <= 599 {
-			return true, e
+		if RetryOnServerErrorEnabled {
+			if e.HTTPCode >= 500 && e.HTTPCode <= 599 {
+				return true, e
+			}
 		}
 	case *BadResponseError:
-		if e.HTTPCode >= 500 && e.HTTPCode <= 599 {
-			return true, e
+		if RetryOnServerErrorEnabled {
+			if e.HTTPCode >= 500 && e.HTTPCode <= 599 {
+				return true, e
+			}
 		}
 	default:
 		return false, e
@@ -55,12 +59,16 @@ func retryWriteErrorCheck(ctx context.Context, err error) (bool, error) {
 
 	switch e := err.(type) {
 	case *Error:
-		if e.HTTPCode == 500 || e.HTTPCode == 502 || e.HTTPCode == 503 {
-			return true, e
+		if RetryOnServerErrorEnabled {
+			if e.HTTPCode == 500 || e.HTTPCode == 502 || e.HTTPCode == 503 {
+				return true, e
+			}
 		}
 	case *BadResponseError:
-		if e.HTTPCode == 500 || e.HTTPCode == 502 || e.HTTPCode == 503 {
-			return true, e
+		if RetryOnServerErrorEnabled {
+			if e.HTTPCode == 500 || e.HTTPCode == 502 || e.HTTPCode == 503 {
+				return true, e
+			}
 		}
 	default:
 		return false, e

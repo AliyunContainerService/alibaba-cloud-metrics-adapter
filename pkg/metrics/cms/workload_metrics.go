@@ -133,7 +133,7 @@ func getCMSParams(namespace string, requirements labels.Requirements) (params *C
 }
 
 // get group id from meta
-func (cs *CMSMetricSource) getGroupIdByName(params *CMSMetricParams) (groupId int, err error) {
+func (cs *CMSMetricSource) getGroupIdByName(params *CMSMetricParams) (groupId int64, err error) {
 
 	//generate cms GroupName
 	groupName := fmt.Sprintf("k8s-%s-%s-%s-%s", params.ClusterId, params.Namespace, params.WorkloadType, params.WorkloadName)
@@ -164,7 +164,7 @@ func (cs *CMSMetricSource) getGroupIdByName(params *CMSMetricParams) (groupId in
 	return 0, err
 }
 
-func (cs *CMSMetricSource) getMetricListByGroupId(params *CMSMetricParams, groupId int, metricName string) (values []DataPoint, err error) {
+func (cs *CMSMetricSource) getMetricListByGroupId(params *CMSMetricParams, groupId int64, metricName string) (values []DataPoint, err error) {
 	request := cms.CreateDescribeMetricListRequest()
 	request.Scheme = "https"
 

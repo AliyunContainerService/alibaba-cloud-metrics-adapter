@@ -1,6 +1,7 @@
 package sls
 
 import (
+	"encoding/json"
 	"strings"
 )
 
@@ -27,10 +28,25 @@ type GetLogsResponse struct {
 	Progress string              `json:"progress"`
 	Count    int64               `json:"count"`
 	Logs     []map[string]string `json:"logs"`
+	Contents string              `json:"contents"`
 }
 
 func (resp *GetLogsResponse) IsComplete() bool {
 	return strings.ToLower(resp.Progress) == "complete"
+}
+
+func (resp *GetLogsResponse) GetKeys() (error, []string) {
+	type Content map[string][]interface{}
+	var content Content
+	err := json.Unmarshal([]byte(resp.Contents), &content)
+	if err != nil {
+		return err, nil
+	}
+	result := []string{}
+	for _, v := range content["keys"] {
+		result = append(result, v.(string))
+	}
+	return nil, result
 }
 
 // IndexKey ...
