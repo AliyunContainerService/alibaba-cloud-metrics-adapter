@@ -6,13 +6,14 @@ import (
 	"strconv"
 	"time"
 
+	"regexp"
+
 	slssdk "github.com/aliyun/aliyun-log-go-sdk"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	log "k8s.io/klog"
 	"k8s.io/metrics/pkg/apis/external_metrics"
-	"regexp"
 )
 
 type QPSResponse struct {
@@ -32,6 +33,9 @@ func (ss *SLSMetricSource) getSLSIngressQuery(params *SLSIngressParams, metricNa
 	queryRealBegin := now - int64(params.DelaySeconds) - int64(params.Interval)
 	end = now - int64(params.DelaySeconds)
 	begin = now - 100
+	if len(params.Route) == 0 {
+		params.Route = "*"
+	}
 	var queryItem string
 	switch metricName {
 	case SLS_INGRESS_QPS:
