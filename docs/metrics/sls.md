@@ -10,6 +10,7 @@ all metrics need the global params.
 | sls.project         | The project name of a SLS instance. | k8s-log-c550367cdf1e84dfabab013b277cc6bc2" | True | 
 | sls.logstore        | The specific logStore of a SLS project. | nginx-ingress  | True | 
 | sls.ingress.route   | route of ingress(namespace-svc-port)| default-kubecon-springboot-demo-6666 | True | 
+|sls.internal.endpoint|sls vpc endpoint, default true|true| False |
  
 
 #### Metrics List 
@@ -101,6 +102,8 @@ spec:
               sls.logstore: ""
               #sls.ingress.route: "default-nginx-80"
               sls.ingress.route: ""
+              # sls vpc endpoint, default true
+              # sls.internal.endpoint:true
         target:
           type: AverageValue
           averageValue: 10
@@ -119,6 +122,8 @@ spec:
               # namespace-svc-port
               # sls.ingress.route: "default-nginx-80"
               sls.ingress.route: ""
+              # sls vpc endpoint, default true
+              # sls.internal.endpoint:true
         target:
           type: Value
           # sls_ingress_latency_p9999 > 10ms

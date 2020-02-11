@@ -46,6 +46,8 @@ spec:
               sls.logstore: ""
               #sls.ingress.route: "default-nginx-80"
               sls.ingress.route: ""
+              # sls vpc endpoint, default true
+              # sls.internal.endpoint:true
         target:
           type: AverageValue
           averageValue: 10
@@ -64,6 +66,8 @@ spec:
               # namespace-svc-port
               # such as: sls.ingress.route: "default-nginx-80"
               sls.ingress.route: ""
+              # sls vpc endpoint, default true
+              # sls.internal.endpoint:true
         target:
           type: Value
           # sls_ingress_latency_p9999 > 10ms
