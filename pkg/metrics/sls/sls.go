@@ -27,6 +27,7 @@ const (
 	SLS_LABEL_QUERY_DELAY     = "sls.query.delay"     // query delay seconds, default 0s
 	SLS_LABEL_QUERY_MAX_RETRY = "sls.query.max_retry" // max retry, default 5
 	SLS_LABEL_INGRESS_ROUTE   = "sls.ingress.route"   // e.g. namespace-svc-port
+	SLS_INTERNAL_ENDPOINT     = "sls.internal.endpoint"
 
 	MIN_INTERVAL      = 15
 	MAX_RETRY_DEFAULT = 5
@@ -76,14 +77,19 @@ func (ss *SLSMetricSource) GetExternalMetric(info p.ExternalMetricInfo, namespac
 }
 
 // create client with specific project
-func (ss *SLSMetricSource) Client(project string) (client sls.ClientInterface, err error) {
+func (ss *SLSMetricSource) Client(project string, internal bool) (client sls.ClientInterface, err error) {
 
 	accessUserInfo, err := utils.GetAccessUserInfo()
 	if err != nil {
 		log.Infof("Failed to GetAccessUserInfo,because of %v", err)
 		return client, err
 	}
-	endpoint := fmt.Sprintf("%s.%s-intranet.log.aliyuncs.com", project, accessUserInfo.Region)
+	var endpoint string
+	if internal {
+		endpoint = fmt.Sprintf("%s.%s-intranet.log.aliyuncs.com", project, accessUserInfo.Region)
+	} else {
+		endpoint = fmt.Sprintf("%s.%s.log.aliyuncs.com", project, accessUserInfo.Region)
+	}
 	client = sls.CreateNormalInterface(endpoint, accessUserInfo.AccessKeyId, accessUserInfo.AccessKeySecret, accessUserInfo.Token)
 
 	return client, nil
@@ -97,6 +103,7 @@ func getSLSParams(requirements labels.Requirements) (params *SLSIngressParams, e
 			Interval:     MIN_INTERVAL,
 			MaxRetry:     MAX_RETRY_DEFAULT,
 			DelaySeconds: 10,
+			Internal:     true,
 		},
 	}
 	for _, r := range requirements {
@@ -130,6 +137,10 @@ func getSLSParams(requirements labels.Requirements) (params *SLSIngressParams, e
 				log.Errorf("Failed to parse %s,because of %v", SLS_LABEL_QUERY_MAX_RETRY, err)
 				return nil, err
 			}
+		case SLS_INTERNAL_ENDPOINT:
+			if value != "" && value == "false" {
+				params.Internal = false
+			}
 		}
 	}
 
@@ -159,6 +170,7 @@ type SLSGlobalParams struct {
 	Interval     int
 	DelaySeconds int
 	MaxRetry     int
+	Internal     bool
 }
 
 func NewSLSMetricSource() *SLSMetricSource {
