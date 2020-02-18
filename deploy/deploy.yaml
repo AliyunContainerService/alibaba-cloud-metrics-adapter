@@ -19,7 +19,7 @@ spec:
       serviceAccountName: admin
       containers:
       - name: alibaba-cloud-metrics-adapter
-        image: registry.cn-beijing.aliyuncs.com/acs/alibaba-cloud-metrics-adapter-amd64:v0.2.0-alpha-fa2572b3-aliyun
+        image: registry.cn-beijing.aliyuncs.com/acs/alibaba-cloud-metrics-adapter-amd64:v0.2.0-alpha-e8f8c17f
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 443
