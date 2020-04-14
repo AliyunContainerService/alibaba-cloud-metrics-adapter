@@ -66,18 +66,6 @@ func GetAccessUserInfo() (accessUserInfo *AccessUserInfo, err error) {
 		}
 	}
 
-	roleName, err := m.RoleName()
-	if err != nil {
-		klog.Errorf("failed to get RoleName,because of %s", err.Error())
-		return nil, err
-	}
-
-	auth, err := m.RamRoleToken(roleName)
-	if err != nil {
-		klog.Errorf("failed to get RamRoleToken,because of %s", err.Error())
-		return nil, err
-	}
-
 	var akInfo AccessUserInfo
 	if _, err := os.Stat(ConfigPath); err == nil {
 		//获取token config json
@@ -104,7 +92,6 @@ func GetAccessUserInfo() (accessUserInfo *AccessUserInfo, err error) {
 		if err != nil {
 			klog.Fatalf("failed to decode token, err: %v", err)
 		}
-		klog.Infof("ak %s sk %s token %s", string(ak), string(sk), string(token))
 		layout := "2006-01-02T15:04:05Z"
 		t, err := time.Parse(layout, akInfo.Expiration)
 		if err != nil {
@@ -119,6 +106,17 @@ func GetAccessUserInfo() (accessUserInfo *AccessUserInfo, err error) {
 		akInfo.Region = region
 	} else {
 		//兼容老的metaserver获取形式
+		roleName, err := m.RoleName()
+		if err != nil {
+			klog.Errorf("failed to get RoleName,because of %s", err.Error())
+			return nil, err
+		}
+
+		auth, err := m.RamRoleToken(roleName)
+		if err != nil {
+			klog.Errorf("failed to get RamRoleToken,because of %s", err.Error())
+			return nil, err
+		}
 		akInfo.AccessKeyId = auth.AccessKeyId
 		akInfo.AccessKeySecret = auth.AccessKeySecret
 		akInfo.Token = auth.SecurityToken
