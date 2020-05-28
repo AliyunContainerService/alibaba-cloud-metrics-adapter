@@ -4,7 +4,8 @@ WORKDIR /src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter
 ENV GOPATH /:/src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/vendor
 
 ADD . /src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter
-RUN apt-get update -y && apt-get install gcc ca-certificates
+RUN apt-get update -y && apt-get install gcc ca-certificates -y
+
 RUN make
 
 

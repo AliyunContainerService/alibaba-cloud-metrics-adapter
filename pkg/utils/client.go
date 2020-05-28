@@ -5,7 +5,6 @@ import (
 	"crypto/cipher"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"github.com/denverdino/aliyungo/metadata"
 	"io/ioutil"
 	"k8s.io/klog"
@@ -95,7 +94,7 @@ func GetAccessUserInfo() (accessUserInfo *AccessUserInfo, err error) {
 		layout := "2006-01-02T15:04:05Z"
 		t, err := time.Parse(layout, akInfo.Expiration)
 		if err != nil {
-			fmt.Errorf(err.Error())
+			klog.Errorf(err.Error())
 		}
 		if t.Before(time.Now()) {
 			klog.Errorf("invalid token which is expired")

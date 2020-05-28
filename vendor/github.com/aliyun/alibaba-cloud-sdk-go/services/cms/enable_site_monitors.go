@@ -86,7 +86,7 @@ type EnableSiteMonitorsResponse struct {
 	Message   string `json:"Message" xml:"Message"`
 	Success   string `json:"Success" xml:"Success"`
 	RequestId string `json:"RequestId" xml:"RequestId"`
-	Data      string `json:"Data" xml:"Data"`
+	Data      Data   `json:"Data" xml:"Data"`
 }
 
 // CreateEnableSiteMonitorsRequest creates a request to invoke EnableSiteMonitors API
@@ -95,6 +95,7 @@ func CreateEnableSiteMonitorsRequest() (request *EnableSiteMonitorsRequest) {
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Cms", "2019-01-01", "EnableSiteMonitors", "cms", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

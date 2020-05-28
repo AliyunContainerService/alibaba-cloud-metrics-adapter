@@ -13,11 +13,9 @@ type Operation func() error
 // the notify function isn't called.
 type Notify func(error, time.Duration)
 
-// Retry the operation o until it does not return error or BackOff stops.
-// o is guaranteed to be run at least once.
-//
-// If o returns a *PermanentError, the operation is not retried, and the
-// wrapped error is returned.
+// Retry the function f until it does not return error or BackOff stops.
+// f is guaranteed to be run at least once.
+// It is the caller's responsibility to reset b after Retry returns.
 //
 // Retry sleeps the goroutine for the duration returned by BackOff after a
 // failed operation returns.
@@ -28,9 +26,6 @@ func Retry(o Operation, b BackOff) error { return RetryNotify(o, b, nil) }
 func RetryNotify(operation Operation, b BackOff, notify Notify) error {
 	var err error
 	var next time.Duration
-	var t *time.Timer
-
-	cb := ensureContext(b)
 
 	b.Reset()
 	for {
@@ -38,11 +33,7 @@ func RetryNotify(operation Operation, b BackOff, notify Notify) error {
 			return nil
 		}
 
-		if permanent, ok := err.(*PermanentError); ok {
-			return permanent.Err
-		}
-
-		if next = cb.NextBackOff(); next == Stop {
+		if next = b.NextBackOff(); next == Stop {
 			return err
 		}
 
@@ -50,33 +41,6 @@ func RetryNotify(operation Operation, b BackOff, notify Notify) error {
 			notify(err, next)
 		}
 
-		if t == nil {
-			t = time.NewTimer(next)
-			defer t.Stop()
-		} else {
-			t.Reset(next)
-		}
-
-		select {
-		case <-cb.Context().Done():
-			return err
-		case <-t.C:
-		}
-	}
-}
-
-// PermanentError signals that the operation should not be retried.
-type PermanentError struct {
-	Err error
-}
-
-func (e *PermanentError) Error() string {
-	return e.Err.Error()
-}
-
-// Permanent wraps the given err in a *PermanentError.
-func Permanent(err error) *PermanentError {
-	return &PermanentError{
-		Err: err,
+		time.Sleep(next)
 	}
 }
