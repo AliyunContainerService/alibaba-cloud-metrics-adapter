@@ -176,11 +176,16 @@ func (sms *SLBMetricSource) getSLBMetrics(namespace, metric, externalMetric stri
 	request.MetricName = metric
 
 	//time range
-	startTime := time.Now().Add(-5 * time.Duration(params.Period) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
-	endTime := time.Now().Format(utils.DEFAULT_TIME_FORMAT)
+	endTime := time.Now().Add(-2 * time.Minute)
+	startTime := endTime.Add(-1 * time.Duration(params.Period) * time.Second)
+	//make ensure that the starttime minus Endtime is greater than period.
+	err = utils.JudgeWithPeriod(startTime, endTime, params.Period)
+	if err != nil {
+		return values, err
+	}
 
-	request.StartTime = startTime
-	request.EndTime = endTime
+	request.StartTime = startTime.Format(utils.DEFAULT_TIME_FORMAT)
+	request.EndTime = endTime.Format(utils.DEFAULT_TIME_FORMAT)
 
 	dimensions, err := createDimensions(params.InstanceId, params.Port)
 	if err != nil {
