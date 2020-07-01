@@ -18,7 +18,7 @@ func TestInvalidGetAhasSentinelParams(t *testing.T) {
 
 func TestValidGetAhasSentinelParams(t *testing.T) {
 	r := make([]labels.Requirement, 0)
-	requirement, e := labels.NewRequirement(AHAS_SENTINEL_APP_NAME, "=", []string{"sentinel-console"})
+	requirement, e := labels.NewRequirement(SentinelAppNameKey, "=", []string{"sentinel-console"})
 	if e != nil {
 		t.Fatalf("new requirement err: %v", e)
 	}

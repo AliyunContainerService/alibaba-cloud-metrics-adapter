@@ -24,11 +24,13 @@ const (
 	AHAS_SENTINEL_BLOCK_QPS = "ahas_sentinel_block_qps"
 	AHAS_SENTINEL_AVG_RT    = "ahas_sentinel_avg_rt"
 
-	AHAS_SENTINEL_APP_NAME       = "ahas.sentinel.app"
-	AHAS_SENTINEL_NAMESPACE      = "ahas.sentinel.namespace"
-	AHAS_SENTINEL_QUERY_INTERVAL = "ahas.sentinel.interval"
+	NamespaceKey             = "ahas.sentinel.namespace"
+	SentinelAppNameKey       = "ahas.sentinel.app"
+	SentinelQueryIntervalKey = "ahas.sentinel.interval"
+	SentinelQueryOffsetKey   = "ahas.sentinel.queryOffset"
 
-	DEFAULT_QUERY_INTERVAL = 10
+	DefaultQueryInterval = 10
+	DefaultQueryOffset   = 10
 )
 
 type AHASSentinelMetricSource struct{}
@@ -63,11 +65,12 @@ func (s *AHASSentinelMetricSource) GetExternalMetric(info provider.ExternalMetri
 	metricRequest := ahas.CreateGetSentinelAppSumMetricRequest()
 	metricRequest.Namespace = params.AhasNamespace
 	metricRequest.AppName = params.AppName
-	interval := int64(params.Interval)
-	endTime := time.Now().Format(utils.DEFAULT_TIME_FORMAT)
-	startTime := time.Now().Add(-1 * time.Duration(interval) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
-	metricRequest.StartTime = startTime
-	metricRequest.EndTime = endTime
+	interval := params.Interval
+	queryOffset := params.QueryStartOffset
+	endTimeStr := time.Now().Add(-1 * time.Duration(queryOffset) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
+	startTimeStr := time.Now().Add(-1 * time.Duration(interval+queryOffset) * time.Second).Format(utils.DEFAULT_TIME_FORMAT)
+	metricRequest.StartTime = startTimeStr
+	metricRequest.EndTime = endTimeStr
 
 	metrics, err := client.GetSentinelAppSumMetric(metricRequest)
 	if err != nil {
@@ -124,7 +127,7 @@ func (s *AHASSentinelMetricSource) createClient() (client *ahas.Client, err erro
 }
 
 type AHASSentinelParams struct {
-	AHASSentinelGlobalParams
+	SentinelGlobalParams
 }
 
 func getAhasSentinelParams(requirements labels.Requirements, k8sNamespace string) (params *AHASSentinelParams, err error) {
@@ -138,13 +141,18 @@ func getAhasSentinelParams(requirements labels.Requirements, k8sNamespace string
 		value := r.Values().List()[0]
 
 		switch r.Key() {
-		case AHAS_SENTINEL_APP_NAME:
+		case SentinelAppNameKey:
 			params.AppName = value
-		case AHAS_SENTINEL_NAMESPACE:
+		case NamespaceKey:
 			params.AhasNamespace = value
-		case AHAS_SENTINEL_QUERY_INTERVAL:
+		case SentinelQueryIntervalKey:
 			if params.Interval, err = strconv.Atoi(value); err != nil {
-				log.Errorf("Failed to parse statistic interval and skip, cause: %v", err)
+				log.Errorf("Failed to parse AHAS Sentinel statistic interval, cause: %v", err)
+				continue
+			}
+		case SentinelQueryOffsetKey:
+			if params.QueryStartOffset, err = strconv.Atoi(value); err != nil {
+				log.Errorf("Failed to parse AHAS Sentinel query start offset, cause: %v", err)
 				continue
 			}
 		}
@@ -172,17 +180,25 @@ func getAhasSentinelParams(requirements labels.Requirements, k8sNamespace string
 		if params.Interval < 0 {
 			log.Warningf("The statistic interval you specific is too low and use 10s as default")
 		}
-		params.Interval = DEFAULT_QUERY_INTERVAL
+		params.Interval = DefaultQueryInterval
+	}
+
+	if params.QueryStartOffset <= 0 {
+		if params.QueryStartOffset < 0 {
+			log.Warningf("Provided AHAS Sentinel query start offset (%d) is too low and use %ds as default", params.QueryStartOffset, DefaultQueryOffset)
+		}
+		params.QueryStartOffset = DefaultQueryOffset
 	}
 
 	return params, nil
 }
 
 // Global params
-type AHASSentinelGlobalParams struct {
-	AppName       string
-	AhasNamespace string
-	Interval      int
+type SentinelGlobalParams struct {
+	AppName          string
+	AhasNamespace    string
+	Interval         int
+	QueryStartOffset int
 }
 
 func NewAHASSentinelMetricSource() *AHASSentinelMetricSource {
