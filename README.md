@@ -111,6 +111,8 @@ Events:
 * <a href="docs/metrics/cms.md">CMS</a>
 * <a href="docs/metrics/ahas_sentinel.md">AHAS Sentinel</a>
 
+### Custom Metrics
+* <a href="docs/metrics/arms_prometheus.md">arms prometheus</a>
 
 ### Contributing 
 Please check <a href="docs/CONTRIBUTING.md">CONTRIBUTING.md</a>

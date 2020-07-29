@@ -50,6 +50,9 @@ type AlibabaMetricsAdapter struct {
 }
 
 func main() {
+	http.HandleFunc("/reload", func(writer http.ResponseWriter, request *http.Request) {
+		os.Exit(0)
+	})
 
 	logs.InitLogs()
 	defer logs.FlushLogs()
@@ -99,8 +102,12 @@ func main() {
 		cmd.WithCustomMetrics(prometheusProvider)
 	}
 
+	go func() {
+		http.ListenAndServe(":8080", nil)
+	}()
+
 	if err := cmd.Run(stopCh); err != nil {
-		klog.Fatalf("Failed to run Alibaba Cloud metrics adapter: %v", err)
+		klog.Fatalf("Failed to run alibaba-cloud-metrics-adapter: %v", err)
 	}
 }
 
@@ -188,6 +195,7 @@ func (cmd *AlibabaMetricsAdapter) loadConfig() error {
 	if cmd.AdapterConfigFile == "" {
 		return fmt.Errorf("no metrics discovery configuration file specified (make sure to use --config)")
 	}
+
 	metricsConfig, err := cfg.FromFile(cmd.AdapterConfigFile)
 	if err != nil {
 		return fmt.Errorf("unable to load metrics discovery configuration: %v", err)
