@@ -86,7 +86,7 @@ type DisableSiteMonitorsResponse struct {
 	Message   string `json:"Message" xml:"Message"`
 	Success   string `json:"Success" xml:"Success"`
 	RequestId string `json:"RequestId" xml:"RequestId"`
-	Data      string `json:"Data" xml:"Data"`
+	Data      Data   `json:"Data" xml:"Data"`
 }
 
 // CreateDisableSiteMonitorsRequest creates a request to invoke DisableSiteMonitors API
@@ -95,6 +95,7 @@ func CreateDisableSiteMonitorsRequest() (request *DisableSiteMonitorsRequest) {
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Cms", "2019-01-01", "DisableSiteMonitors", "cms", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

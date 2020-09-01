@@ -89,7 +89,7 @@ type DescribeSiteMonitorStatisticsResponse struct {
 	Message   string `json:"Message" xml:"Message"`
 	Success   string `json:"Success" xml:"Success"`
 	RequestId string `json:"RequestId" xml:"RequestId"`
-	Data      int64  `json:"Data" xml:"Data"`
+	Data      string `json:"Data" xml:"Data"`
 }
 
 // CreateDescribeSiteMonitorStatisticsRequest creates a request to invoke DescribeSiteMonitorStatistics API
@@ -98,6 +98,7 @@ func CreateDescribeSiteMonitorStatisticsRequest() (request *DescribeSiteMonitorS
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Cms", "2019-01-01", "DescribeSiteMonitorStatistics", "cms", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

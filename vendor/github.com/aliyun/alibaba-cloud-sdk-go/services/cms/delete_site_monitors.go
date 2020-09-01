@@ -87,7 +87,7 @@ type DeleteSiteMonitorsResponse struct {
 	Message   string `json:"Message" xml:"Message"`
 	Success   string `json:"Success" xml:"Success"`
 	RequestId string `json:"RequestId" xml:"RequestId"`
-	Data      string `json:"Data" xml:"Data"`
+	Data      Data   `json:"Data" xml:"Data"`
 }
 
 // CreateDeleteSiteMonitorsRequest creates a request to invoke DeleteSiteMonitors API
@@ -96,6 +96,7 @@ func CreateDeleteSiteMonitorsRequest() (request *DeleteSiteMonitorsRequest) {
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Cms", "2019-01-01", "DeleteSiteMonitors", "cms", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

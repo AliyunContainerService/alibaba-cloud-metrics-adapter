@@ -13,11 +13,18 @@ import (
 	"k8s.io/metrics/pkg/apis/external_metrics"
 )
 
-var externalMetricsManager *ExternalMetricsManager
+var (
+	externalMetricsManager *ExternalMetricsManager
+	customMetricsMangaer   *CustomMetricsManager
+)
 
 func init() {
 	externalMetricsManager = &ExternalMetricsManager{
 		metricsSource: make(map[p.ExternalMetricInfo]MetricSource),
+	}
+
+	customMetricsMangaer = &CustomMetricsManager{
+		metricsSource: make(map[p.CustomMetricInfo]MetricSource),
 	}
 
 	// add metrics source
@@ -31,6 +38,10 @@ func GetExternalMetricsManager() *ExternalMetricsManager {
 	return externalMetricsManager
 }
 
+func GetCustomMetricsManager() *CustomMetricsManager {
+	return customMetricsMangaer
+}
+
 func register(m MetricSource) {
 	externalMetricsManager.AddMetricsSource(m)
 }
@@ -42,6 +53,10 @@ type MetricSource interface {
 
 type ExternalMetricsManager struct {
 	metricsSource map[p.ExternalMetricInfo]MetricSource
+}
+
+type CustomMetricsManager struct {
+	metricsSource map[p.CustomMetricInfo]MetricSource
 }
 
 func (em *ExternalMetricsManager) AddMetricsSource(m MetricSource) {
