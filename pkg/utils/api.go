@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/prometheus/common/model"
@@ -37,7 +38,7 @@ type httpAPIClient struct {
 func (c *httpAPIClient) Do(ctx context.Context, verb, endpoint string, query string) (APIResponse, error) {
 	u := *c.baseURL
 	u.Path = path.Join(c.baseURL.Path, endpoint)
-	u.RawQuery = query
+	u.RawQuery = strings.Replace(query, " ", "", -1)
 	req, err := http.NewRequest(verb, u.String(), nil)
 	if err != nil {
 		return APIResponse{}, fmt.Errorf("error constructing HTTP request to Prometheus: %v", err)
