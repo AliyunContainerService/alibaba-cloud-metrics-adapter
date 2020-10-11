@@ -14,15 +14,20 @@ import (
 
 const (
 	SLS_INGRESS_QPS           = "sls_ingress_qps"
+	SLS_INGRESS_QPM           = "sls_ingress_qpm"
 	SLS_INGRESS_LATENCY_AVG   = "sls_ingress_latency_avg"
 	SLS_INGRESS_LATENCY_P50   = "sls_ingress_latency_p50"
 	SLS_INGRESS_LATENCY_P95   = "sls_ingress_latency_p95"
 	SLS_INGRESS_LATENCY_P9999 = "sls_ingress_latency_p9999"
 	SLS_INGRESS_LATENCY_P99   = "sls_ingress_latency_p99"
-	SLS_INGRESS_INFLOW        = "sls_ingress_inflow" // byte per second
+	SLS_INGRESS_INFLOW        = "sls_ingress_inflow"  // byte per second
+	SLS_INGRESS_PREDICT       = "sls_ingress_predict" // when use this metric type, should start sls predict job
 
 	SLS_LABEL_PROJECT         = "sls.project"
 	SLS_LABEL_LOGSTORE        = "sls.logstore"
+	SLS_LABEL_ML_LOGSTORE     = "sls.ml.logstore"
+	SLS_LABEL_ML_JOBID        = "sls.ml.jobid"
+	SLS_LABEL_ML_TARGET       = "sls.ml.target"
 	SLS_LABEL_QUERY_INTERVAL  = "sls.query.interval"  // query interval seconds, min val 15s
 	SLS_LABEL_QUERY_DELAY     = "sls.query.delay"     // query delay seconds, default 0s
 	SLS_LABEL_QUERY_MAX_RETRY = "sls.query.max_retry" // max retry, default 5
@@ -66,10 +71,24 @@ func (ss *SLSMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 	metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
 		Metric: SLS_INGRESS_INFLOW,
 	})
+	// ingress predict
+	metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
+		Metric: SLS_INGRESS_PREDICT,
+	})
 	return metricInfoList
 }
+
 func (ss *SLSMetricSource) GetExternalMetric(info p.ExternalMetricInfo, namespace string, requirements labels.Requirements) (values []external_metrics.ExternalMetricValue, err error) {
-	values, err = ss.getSLSIngressMetrics(namespace, requirements, info.Metric)
+	switch info.Metric {
+	case SLS_INGRESS_PREDICT, SLS_INGRESS_QPM:
+		values, err = ss.getSLSIngressPredictMetrics(namespace, requirements, info.Metric)
+		if len(values) == 0 {
+			log.Warning("Failed to Get Ingress Predict Value from SLS, because of model not finished ! We should use ingress qps instead !")
+			values, err = ss.getSLSIngressPredictMetrics(namespace, requirements, SLS_INGRESS_QPS)
+		}
+	default:
+		values, err = ss.getSLSIngressMetrics(namespace, requirements, info.Metric)
+	}
 	if err != nil {
 		log.Warningf("Failed to GetExternalMetric %s,because of %v", info.Metric, err)
 	}
@@ -120,6 +139,8 @@ func getSLSParams(requirements labels.Requirements) (params *SLSIngressParams, e
 			params.Project = value
 		case SLS_LABEL_LOGSTORE:
 			params.LogStore = value
+		case SLS_LABEL_ML_LOGSTORE:
+			params.MlLogStore = value
 		case SLS_LABEL_INGRESS_ROUTE:
 			params.Route = value
 		case SLS_LABEL_QUERY_INTERVAL:
@@ -141,6 +162,8 @@ func getSLSParams(requirements labels.Requirements) (params *SLSIngressParams, e
 			if value != "" && value == "false" {
 				params.Internal = false
 			}
+		case SLS_LABEL_ML_TARGET:
+			params.TargetRouter = value
 		}
 	}
 
@@ -167,10 +190,12 @@ func getSLSParams(requirements labels.Requirements) (params *SLSIngressParams, e
 type SLSGlobalParams struct {
 	Project      string
 	LogStore     string
+	MlLogStore   string
 	Interval     int
 	DelaySeconds int
 	MaxRetry     int
 	Internal     bool
+	TargetRouter string
 }
 
 func NewSLSMetricSource() *SLSMetricSource {
