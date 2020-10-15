@@ -64,36 +64,13 @@ spec:
     - type: External
       external:
         metric:
-          name: sls_ingress_qps
+          name: sls_ingress_predict
           selector:
             matchLabels:
-              #sls.project: "k8s-log-c550367cdf1e84dfabab013b277cc6bc2"
-              sls.project: ""
-              #sls.logstore: "nginx-ingress"
-              sls.logstore: ""
-              #sls.ingress.route: "default-nginx-80"
-              sls.ingress.route: ""
+              sls.project: "k8s-log-c0ae5df15fbf34b47ba3a9684e6ee2bee"
+              sls.logstore: "nginx-ingress"
+              sls.ml.logstore: "ml-service"
+              sls.ingress.route: "prod-serviceA-8080"
         target:
           type: AverageValue
-          averageValue: 10
-    - type: External
-      external:
-        metric:
-          name: sls_ingress_latency_p9999
-          selector:
-            matchLabels:
-              # default ingress log project is k8s-log-clusterId
-              # sls.project: "k8s-log-c550367cdf1e84dfabab013b277cc6bc2"
-              sls.project: ""
-              # default ingress logstre is nginx-ingress
-              # sls.logstore: "nginx-ingress"
-              sls.logstore: ""
-              # namespace-svc-port
-              # sls.ingress.route: "default-nginx-80"
-              sls.ingress.route: ""
-              # sls vpc endpoint, default true
-              # sls.internal.endpoint: true
-        target:
-          type: Value
-          # sls_ingress_latency_p9999 > 10ms
-          value: 10
+          averageValue: 100

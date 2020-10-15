@@ -81,7 +81,8 @@ func main() {
 	//
 	alibabaCloudProvider, err := makeAlibabaCloudProvider(cmd)
 	if err != nil {
-		klog.Fatalf("unable to construct alibabCloudProvider: %v", err)
+		//klog.Fatalf("unable to construct alibabCloudProvider: %v", err)
+		klog.Errorf("unable to construct alibabCloudProvider: %v", err)
 	}
 
 	if alibabaCloudProvider != nil {
@@ -90,12 +91,14 @@ func main() {
 
 	// load the config
 	if err := cmd.loadConfig(); err != nil {
-		klog.Fatalf("unable to load metrics discovery config: %v", err)
+		//klog.Fatalf("unable to load metrics discovery config: %v", err)
+		klog.Errorf("unable to load metrics discovery config: %v", err)
 	}
 
 	prometheusProvider, err := makePrometheusProvider(cmd, stopCh)
 	if err != nil {
-		klog.Fatalf("unable to construct prometheusProvider: %v", err)
+		//klog.Fatalf("unable to construct prometheusProvider: %v", err)
+		klog.Errorf("unable to construct prometheusProvider: %v", err)
 	}
 
 	if prometheusProvider != nil {
@@ -107,7 +110,8 @@ func main() {
 	}()
 
 	if err := cmd.Run(stopCh); err != nil {
-		klog.Fatalf("Failed to run alibaba-cloud-metrics-adapter: %v", err)
+		//klog.Fatalf("Failed to run alibaba-cloud-metrics-adapter: %v", err)
+		klog.Errorf("Failed to run alibaba-cloud-metrics-adapter: %v", err)
 	}
 }
 
