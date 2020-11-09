@@ -3,6 +3,7 @@ package sls
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -151,16 +152,16 @@ func (ss *SLSMetricSource) getSLSIngressPredictQuery(params *SLSIngressParams, m
 	return
 }
 
-func (ss *SLSMetricSource) getSLSIngressPredictMetrics(namespace string, requirements labels.Requirements, metricName string) (values []external_metrics.ExternalMetricValue, err error) {
+func (ss *SLSMetricSource) getSLSIngressPredictMetrics(namespace string, requirements labels.Requirements, metricName string) (string, int64, error) {
 	params, err := getSLSParams(requirements)
 	if err != nil {
-		return values, fmt.Errorf("failed to get sls params,because of %v", err)
+		return metricName, -1, fmt.Errorf("failed to get sls params,because of %v", err)
 	}
 
 	client, err := ss.Client(params.Project, params.Internal)
 	if err != nil {
 		log.Errorf("Failed to create sls client, because of %v", err)
-		return values, err
+		return metricName, -1, err
 	}
 
 	begin, end, query := ss.getSLSIngressPredictQuery(params, metricName)
@@ -168,15 +169,21 @@ func (ss *SLSMetricSource) getSLSIngressPredictMetrics(namespace string, require
 
 	if query == "" {
 		log.Errorf("The metric you specific is not supported.")
-		return values, errors.New("MetricNotSupport")
+		return metricName, -1, errors.New("MetricNotSupport")
 	}
 
 	var queryRsp *slssdk.GetLogsResponse
 	for i := 0; i < params.MaxRetry; i++ {
-		queryRsp, err = client.GetLogs(params.Project, params.MlLogStore, "", begin, end, query, 100, 0, false)
-
+		logstoreName := ""
+		switch metricName {
+		case SLS_INGRESS_QPM:
+			logstoreName = params.LogStore
+		case SLS_INGRESS_PREDICT:
+			logstoreName = params.MlLogStore
+		}
+		queryRsp, err = client.GetLogs(params.Project, logstoreName, "", begin, end, query, 100, 0, false)
 		if err != nil || len(queryRsp.Logs) == 0 {
-			return values, err
+			return metricName, -1, err
 		}
 
 		// if there are too many logs in sls, query may be not completed, we should retry
@@ -213,18 +220,18 @@ func (ss *SLSMetricSource) getSLSIngressPredictMetrics(namespace string, require
 			}
 		}
 
-		fmt.Println("Project", params.Project, "MlLogStore", params.MlLogStore, "expectScore", expectScore, "timestamp", metav1.Now())
+		fmt.Println("Project", params.Project, "LogstoreName", logstoreName, "expectScore", expectScore, "timestamp", metav1.Now())
 		if err != nil {
-			return values, err
+			return metricName, -1, err
 		}
 
-		values = append(values, external_metrics.ExternalMetricValue{
-			MetricName: metricName,
-			Value:      *resource.NewQuantity(int64(expectScore), resource.DecimalSI),
-			Timestamp:  metav1.Now(),
-		})
+		//values = append(values, external_metrics.ExternalMetricValue{
+		//	MetricName: metricName,
+		//	Value:      *resource.NewQuantity(int64(expectScore), resource.DecimalSI),
+		//	Timestamp:  metav1.Now(),
+		//})
 
-		return values, err
+		return metricName, int64(math.Ceil(expectScore)), err
 	}
-	return values, errors.New("Query sls timeout,it might because of too many logs.")
+	return metricName, -1, errors.New("Query sls timeout,it might because of too many logs.")
 }

@@ -69,8 +69,9 @@ spec:
             matchLabels:
               sls.project: "k8s-log-c0ae5df15fbf34b47ba3a9684e6ee2bee"
               sls.logstore: "nginx-ingress"
-              sls.ml.logstore: "ml-service"
+              sls.ml.logstore: "ml-res"
               sls.ingress.route: "prod-serviceA-8080"
+              sls.query.delay: "20"
         target:
           type: AverageValue
-          averageValue: 100
+          averageValue: 50

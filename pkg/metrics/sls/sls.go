@@ -6,6 +6,8 @@ import (
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/utils"
 	"github.com/aliyun/aliyun-log-go-sdk"
 	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	log "k8s.io/klog"
 	"k8s.io/metrics/pkg/apis/external_metrics"
@@ -79,10 +81,35 @@ func (ss *SLSMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 func (ss *SLSMetricSource) GetExternalMetric(info p.ExternalMetricInfo, namespace string, requirements labels.Requirements) (values []external_metrics.ExternalMetricValue, err error) {
 	switch info.Metric {
 	case SLS_INGRESS_PREDICT, SLS_INGRESS_QPM:
-		values, err = ss.getSLSIngressPredictMetrics(namespace, requirements, info.Metric)
-		if len(values) == 0 {
+		var resErr error = nil
+		var predTargetVal int64 = -1
+		if info.Metric == SLS_INGRESS_PREDICT {
+			_, predTargetVal, resErr = ss.getSLSIngressPredictMetrics(namespace, requirements, info.Metric)
+		}
+		_, baseVal, errBase := ss.getSLSIngressPredictMetrics(namespace, requirements, SLS_INGRESS_QPS)
+
+		var targetVal int64 = -1
+		if predTargetVal > baseVal {
+			targetVal = predTargetVal
+		} else {
+			targetVal = baseVal
+		}
+
+		if targetVal <= 0 {
 			log.Warning("Failed to Get Ingress Predict Value from SLS, because of model not finished ! We should use ingress qps instead !")
-			values, err = ss.getSLSIngressPredictMetrics(namespace, requirements, SLS_INGRESS_QPS)
+			if resErr != nil {
+				err = resErr
+			}
+			if errBase != nil {
+				err = errBase
+			}
+		} else {
+			values = append(values, external_metrics.ExternalMetricValue{
+				MetricName: info.Metric,
+				Value:      *resource.NewQuantity(targetVal, resource.DecimalSI),
+				Timestamp:  metav1.Now(),
+			})
+			err = nil
 		}
 	default:
 		values, err = ss.getSLSIngressMetrics(namespace, requirements, info.Metric)
