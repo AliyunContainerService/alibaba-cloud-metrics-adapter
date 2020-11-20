@@ -66,7 +66,7 @@ func NewResourceConverter(resourceTemplate string, overrides map[string]config.G
 		converter.labelResExtractor = labelResExtractor
 	}
 	// invert the structure for consistency with the template
-	for _, groupRes := range overrides {
+	for lbl, groupRes := range overrides {
 		infoRaw := provider.CustomMetricInfo{
 			GroupResource: schema.GroupResource{
 				Group:    groupRes.Group,
@@ -78,8 +78,8 @@ func NewResourceConverter(resourceTemplate string, overrides map[string]config.G
 			return nil, fmt.Errorf("unable to normalize group-resource %v: %v", groupRes, err)
 		}
 
-		converter.labelToResource[pmodel.LabelName(groupRes.Resource)] = info.GroupResource
-		converter.resourceToLabel[info.GroupResource] = pmodel.LabelName(groupRes.Resource)
+		converter.labelToResource[pmodel.LabelName(lbl)] = info.GroupResource
+		converter.resourceToLabel[info.GroupResource] = pmodel.LabelName(lbl)
 	}
 
 	return converter, nil

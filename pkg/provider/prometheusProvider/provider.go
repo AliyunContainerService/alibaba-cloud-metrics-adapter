@@ -250,7 +250,7 @@ func (l *cachingMetricsLister) updateMetrics() error {
 		newSeries[i] = namer.FilterSeries(series)
 	}
 
-	klog.V(1).Infof("Set available metric list from Prometheus to: %v", newSeries)
+	klog.V(6).Infof("Set available metric list from Prometheus to: %v", newSeries)
 
 	return l.SetSeries(newSeries, l.namers)
 }

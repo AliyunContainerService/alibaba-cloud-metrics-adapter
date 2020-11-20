@@ -121,7 +121,7 @@ func (ss *SLSMetricSource) GetExternalMetric(info p.ExternalMetricInfo, namespac
 }
 
 // create client with specific project
-func (ss *SLSMetricSource) Client(project string, internal bool) (client sls.ClientInterface, err error) {
+func (ss *SLSMetricSource) Client(internal bool) (client sls.ClientInterface, err error) {
 
 	accessUserInfo, err := utils.GetAccessUserInfo()
 	if err != nil {
@@ -130,9 +130,9 @@ func (ss *SLSMetricSource) Client(project string, internal bool) (client sls.Cli
 	}
 	var endpoint string
 	if internal {
-		endpoint = fmt.Sprintf("%s.%s-intranet.log.aliyuncs.com", project, accessUserInfo.Region)
+		endpoint = fmt.Sprintf("%s-intranet.log.aliyuncs.com", accessUserInfo.Region)
 	} else {
-		endpoint = fmt.Sprintf("%s.%s.log.aliyuncs.com", project, accessUserInfo.Region)
+		endpoint = fmt.Sprintf("%s.log.aliyuncs.com", accessUserInfo.Region)
 	}
 	client = sls.CreateNormalInterface(endpoint, accessUserInfo.AccessKeyId, accessUserInfo.AccessKeySecret, accessUserInfo.Token)
 
