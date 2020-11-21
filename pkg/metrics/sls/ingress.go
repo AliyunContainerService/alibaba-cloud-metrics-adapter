@@ -158,7 +158,7 @@ func (ss *SLSMetricSource) getSLSIngressPredictMetrics(namespace string, require
 		return metricName, -1, fmt.Errorf("failed to get sls params,because of %v", err)
 	}
 
-	client, err := ss.Client(params.Project, params.Internal)
+	client, err := ss.Client(params.Internal)
 	if err != nil {
 		log.Errorf("Failed to create sls client, because of %v", err)
 		return metricName, -1, err
