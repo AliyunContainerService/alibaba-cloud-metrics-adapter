@@ -17,10 +17,12 @@ spec:
       name: alibaba-cloud-metrics-adapter
     spec:
       serviceAccountName: admin
+      imagePullSecrets:
+      - name: regsecret
       containers:
       - name: alibaba-cloud-metrics-adapter
-        image: registry.cn-beijing.aliyuncs.com/acs/alibaba-cloud-metrics-adapter-amd64:v0.2.0-alpha-e8f8c17f
-        imagePullPolicy: IfNotPresent
+        image: registry.cn-beijing.aliyuncs.com/sls-model/auto-hpa:0.0
+        imagePullPolicy: Always
         ports:
         - containerPort: 443
           name: https

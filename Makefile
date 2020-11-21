@@ -34,6 +34,8 @@ test-unit-cov: clean sanitize build
 
 docker-container:
 	docker build --pull -t $(PREFIX)/alibaba-cloud-metrics-adapter-$(ARCH):$(VERSION)-$(GIT_COMMIT) -f deploy/Dockerfile .
+	# docker build --pull -t registry.cn-beijing.aliyuncs.com/sls-model/auto-hpa:0.0 -f deploy/Dockerfile .
+	#docker push registry.cn-beijing.aliyuncs.com/sls-model/auto-hpa:0.0
 
 clean:
 	rm -f alibaba-cloud-metrics-adapter
