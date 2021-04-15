@@ -1,0 +1,29 @@
+FROM reg.docker.alibaba-inc.com/cos/golang:1.12.9-arm64 AS build-env
+
+WORKDIR /src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter
+ENV GOPATH /:/src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/vendor
+
+ADD . /src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter
+RUN apt-get update -y && apt-get install gcc ca-certificates -y
+
+RUN make ARCH=arm64
+
+
+FROM reg.docker.alibaba-inc.com/cos/busybox-glibc-arm64:latest
+
+COPY --from=build-env /usr/local/go/lib/time/zoneinfo.zip /usr/local/go/lib/time/zoneinfo.zip
+COPY --from=build-env /src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/alibaba-cloud-metrics-adapter /
+COPY --from=build-env /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+
+#RUN apk add --no-cache tini
+
+# Add Tini
+ENV TINI_VERSION v0.19.0
+ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-arm64 /tini
+RUN chmod +x /tini
+
+
+RUN chmod +x /alibaba-cloud-metrics-adapter
+
+ENTRYPOINT ["/tini", "--", "/alibaba-cloud-metrics-adapter"]
