@@ -1,4 +1,4 @@
-FROM golang:1.12.6 AS build-env
+FROM golang:1.16.4 AS build-env
 
 WORKDIR /src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter
 ENV GOPATH /:/src/github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/vendor
