@@ -153,7 +153,7 @@ rules:
   # specify how to construct a query to fetch samples for a given series
   # This is a Go template where the `.Series` and `.LabelMatchers` string values
   # are available, and the delimiters are `<<` and `>>` to avoid conflicts with
-  # the prometheus query language
+  # the prom query language
   metricsQuery: "sum(rate(<<.Series>>{<<.LabelMatchers>>,container_name!="POD"}[2m])) by (<<.GroupBy>>)"
 
 # this rule matches cumulative cAdvisor metrics not measured in seconds
