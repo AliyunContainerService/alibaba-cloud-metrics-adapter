@@ -36,6 +36,10 @@ func (em *ExternalMetricsManager) RegisterMetricsSource() {
 func NewExternalMetricsManager(prometheusUrl string) *ExternalMetricsManager {
 	recorder := make(map[string]*hashset.Set)
 	recorder["prometheus"] = hashset.New()
+	recorder["sls"] = hashset.New()
+	recorder["slb"] = hashset.New()
+	recorder["cms"] = hashset.New()
+	recorder["ahas"] = hashset.New()
 
 	return &ExternalMetricsManager{
 		prometheusUrl: prometheusUrl,
@@ -62,6 +66,7 @@ type ExternalMetricsManager struct {
 
 func (em *ExternalMetricsManager) AddMetricsSource(m MetricSource) {
 	metricInfoList := m.GetExternalMetricInfoList()
+
 	if em.recorder[m.Name()].Size() != len(metricInfoList) {
 		if em.recorder[m.Name()].Size() == 0 {
 			// nothing

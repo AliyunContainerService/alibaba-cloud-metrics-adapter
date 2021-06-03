@@ -106,7 +106,7 @@ Events:
 ```
 
 ### Cloud Resource Metrics List
-* <a href="docs/metrics/sls.md">Ingress（SLS)</a>
+* <a href="docs/metrics/sls.md">Ingress(SLS)</a>
 * <a href="docs/metrics/slb.md">SLB</a>
 * <a href="docs/metrics/cms.md">CMS</a>
 * <a href="docs/metrics/ahas_sentinel.md">AHAS Sentinel</a>
