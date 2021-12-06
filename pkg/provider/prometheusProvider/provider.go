@@ -106,6 +106,9 @@ func (p *PrometheusProvider) buildQuery(info provider.CustomMetricInfo, namespac
 
 	// TODO: use an actual context
 	queryResults, err := p.promClient.Query(context.TODO(), pmodel.Now(), query)
+
+	fmt.Printf("DEBUG buildQuery : %v\n", queryResults)
+
 	if err != nil {
 		klog.Errorf("unable to fetch metrics from prometheus: %v", err)
 		// don't leak implementation details to the user
