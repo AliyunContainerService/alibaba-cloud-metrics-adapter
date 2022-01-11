@@ -21,7 +21,7 @@ import (
 	"net/http"
 	"time"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/user"
@@ -52,7 +52,7 @@ func (s *DeprecatedInsecureServingInfo) Serve(handler http.Handler, shutdownTime
 	} else {
 		klog.Infof("Serving insecurely on %s", s.Listener.Addr())
 	}
-	_, err := RunServer(insecureServer, s.Listener, shutdownTimeout, stopCh)
+	_, _, err := RunServer(insecureServer, s.Listener, shutdownTimeout, stopCh)
 	// NOTE: we do not handle stoppedCh returned by RunServer for graceful termination here
 	return err
 }

@@ -22,34 +22,46 @@ import (
 	"net"
 	"net/url"
 	"path"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	grpcprom "github.com/grpc-ecosystem/go-grpc-prometheus"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/pkg/transport"
+	"go.etcd.io/etcd/client/pkg/v3/transport"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/apimachinery/pkg/util/wait"
+	genericfeatures "k8s.io/apiserver/pkg/features"
 	"k8s.io/apiserver/pkg/server/egressselector"
 	"k8s.io/apiserver/pkg/storage"
 	"k8s.io/apiserver/pkg/storage/etcd3"
+	"k8s.io/apiserver/pkg/storage/etcd3/metrics"
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 	"k8s.io/apiserver/pkg/storage/value"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/component-base/metrics/legacyregistry"
+	"k8s.io/component-base/traces"
+	"k8s.io/klog/v2"
 )
 
-// The short keepalive timeout and interval have been chosen to aggressively
-// detect a failed etcd server without introducing much overhead.
-const keepaliveTime = 30 * time.Second
-const keepaliveTimeout = 10 * time.Second
+const (
+	// The short keepalive timeout and interval have been chosen to aggressively
+	// detect a failed etcd server without introducing much overhead.
+	keepaliveTime    = 30 * time.Second
+	keepaliveTimeout = 10 * time.Second
 
-// dialTimeout is the timeout for failing to establish a connection.
-// It is set to 20 seconds as times shorter than that will cause TLS connections to fail
-// on heavily loaded arm64 CPUs (issue #64649)
-const dialTimeout = 20 * time.Second
+	// dialTimeout is the timeout for failing to establish a connection.
+	// It is set to 20 seconds as times shorter than that will cause TLS connections to fail
+	// on heavily loaded arm64 CPUs (issue #64649)
+	dialTimeout = 20 * time.Second
+
+	dbMetricsMonitorJitter = 0.5
+)
 
 func init() {
 	// grpcprom auto-registers (via an init function) their client metrics, since we are opting out of
@@ -57,6 +69,7 @@ func init() {
 	// we need to explicitly register these metrics to our global registry here.
 	// For reference: https://github.com/kubernetes/kubernetes/pull/81387
 	legacyregistry.RawMustRegister(grpcprom.DefaultClientMetrics)
+	dbMetricsMonitors = make(map[string]struct{})
 }
 
 func newETCD3HealthCheck(c storagebackend.Config) (func() error, error) {
@@ -84,7 +97,11 @@ func newETCD3HealthCheck(c storagebackend.Config) (func() error, error) {
 			return fmt.Errorf(errMsg)
 		}
 		client := clientValue.Load().(*clientv3.Client)
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		healthcheckTimeout := storagebackend.DefaultHealthcheckTimeout
+		if c.HealthcheckTimeout != time.Duration(0) {
+			healthcheckTimeout = c.HealthcheckTimeout
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), healthcheckTimeout)
 		defer cancel()
 		// See https://github.com/etcd-io/etcd/blob/c57f8b3af865d1b531b979889c602ba14377420e/etcdctl/ctlv3/command/ep_command.go#L118
 		_, err := client.Get(ctx, path.Join("/", c.Prefix, "health"))
@@ -123,13 +140,30 @@ func newETCD3Client(c storagebackend.TransportConfig) (*clientv3.Client, error) 
 		grpc.WithUnaryInterceptor(grpcprom.UnaryClientInterceptor),
 		grpc.WithStreamInterceptor(grpcprom.StreamClientInterceptor),
 	}
+	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.APIServerTracing) {
+		tracingOpts := []otelgrpc.Option{
+			otelgrpc.WithPropagators(traces.Propagators()),
+		}
+		if c.TracerProvider != nil {
+			tracingOpts = append(tracingOpts, otelgrpc.WithTracerProvider(*c.TracerProvider))
+		}
+		// Even if there is no TracerProvider, the otelgrpc still handles context propagation.
+		// See https://github.com/open-telemetry/opentelemetry-go/tree/main/example/passthrough
+		dialOptions = append(dialOptions,
+			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor(tracingOpts...)),
+			grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor(tracingOpts...)))
+	}
 	if egressDialer != nil {
 		dialer := func(ctx context.Context, addr string) (net.Conn, error) {
-			u, err := url.Parse(addr)
-			if err != nil {
-				return nil, err
+			if strings.Contains(addr, "//") {
+				// etcd client prior to 3.5 passed URLs to dialer, normalize to address
+				u, err := url.Parse(addr)
+				if err != nil {
+					return nil, err
+				}
+				addr = u.Host
 			}
-			return egressDialer(ctx, "tcp", u.Host)
+			return egressDialer(ctx, "tcp", addr)
 		}
 		dialOptions = append(dialOptions, grpc.WithContextDialer(dialer))
 	}
@@ -153,16 +187,20 @@ type runningCompactor struct {
 }
 
 var (
-	lock       sync.Mutex
-	compactors = map[string]*runningCompactor{}
+	// compactorsMu guards access to compactors map
+	compactorsMu sync.Mutex
+	compactors   = map[string]*runningCompactor{}
+	// dbMetricsMonitorsMu guards access to dbMetricsMonitors map
+	dbMetricsMonitorsMu sync.Mutex
+	dbMetricsMonitors   map[string]struct{}
 )
 
 // startCompactorOnce start one compactor per transport. If the interval get smaller on repeated calls, the
 // compactor is replaced. A destroy func is returned. If all destroy funcs with the same transport are called,
 // the compactor is stopped.
 func startCompactorOnce(c storagebackend.TransportConfig, interval time.Duration) (func(), error) {
-	lock.Lock()
-	defer lock.Unlock()
+	compactorsMu.Lock()
+	defer compactorsMu.Unlock()
 
 	key := fmt.Sprintf("%v", c) // gives: {[server1 server2] keyFile certFile caFile}
 	if compactor, foundBefore := compactors[key]; !foundBefore || compactor.interval > interval {
@@ -193,8 +231,8 @@ func startCompactorOnce(c storagebackend.TransportConfig, interval time.Duration
 	compactors[key].refs++
 
 	return func() {
-		lock.Lock()
-		defer lock.Unlock()
+		compactorsMu.Lock()
+		defer compactorsMu.Unlock()
 
 		compactor := compactors[key]
 		compactor.refs--
@@ -206,7 +244,7 @@ func startCompactorOnce(c storagebackend.TransportConfig, interval time.Duration
 	}, nil
 }
 
-func newETCD3Storage(c storagebackend.Config) (storage.Interface, DestroyFunc, error) {
+func newETCD3Storage(c storagebackend.Config, newFunc func() runtime.Object) (storage.Interface, DestroyFunc, error) {
 	stopCompactor, err := startCompactorOnce(c.Transport, c.CompactionInterval)
 	if err != nil {
 		return nil, nil, err
@@ -218,6 +256,11 @@ func newETCD3Storage(c storagebackend.Config) (storage.Interface, DestroyFunc, e
 		return nil, nil, err
 	}
 
+	stopDBSizeMonitor, err := startDBSizeMonitorPerEndpoint(client, c.DBMetricPollInterval)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	var once sync.Once
 	destroyFunc := func() {
 		// we know that storage destroy funcs are called multiple times (due to reuse in subresources).
@@ -225,6 +268,7 @@ func newETCD3Storage(c storagebackend.Config) (storage.Interface, DestroyFunc, e
 		// TODO: fix duplicated storage destroy calls higher level
 		once.Do(func() {
 			stopCompactor()
+			stopDBSizeMonitor()
 			client.Close()
 		})
 	}
@@ -232,5 +276,38 @@ func newETCD3Storage(c storagebackend.Config) (storage.Interface, DestroyFunc, e
 	if transformer == nil {
 		transformer = value.IdentityTransformer
 	}
-	return etcd3.New(client, c.Codec, c.Prefix, transformer, c.Paging), destroyFunc, nil
+	return etcd3.New(client, c.Codec, newFunc, c.Prefix, transformer, c.Paging, c.LeaseManagerConfig), destroyFunc, nil
+}
+
+// startDBSizeMonitorPerEndpoint starts a loop to monitor etcd database size and update the
+// corresponding metric etcd_db_total_size_in_bytes for each etcd server endpoint.
+func startDBSizeMonitorPerEndpoint(client *clientv3.Client, interval time.Duration) (func(), error) {
+	if interval == 0 {
+		return func() {}, nil
+	}
+	dbMetricsMonitorsMu.Lock()
+	defer dbMetricsMonitorsMu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	for _, ep := range client.Endpoints() {
+		if _, found := dbMetricsMonitors[ep]; found {
+			continue
+		}
+		dbMetricsMonitors[ep] = struct{}{}
+		endpoint := ep
+		klog.V(4).Infof("Start monitoring storage db size metric for endpoint %s with polling interval %v", endpoint, interval)
+		go wait.JitterUntilWithContext(ctx, func(context.Context) {
+			epStatus, err := client.Maintenance.Status(ctx, endpoint)
+			if err != nil {
+				klog.V(4).Infof("Failed to get storage db size for ep %s: %v", endpoint, err)
+				metrics.UpdateEtcdDbSize(endpoint, -1)
+			} else {
+				metrics.UpdateEtcdDbSize(endpoint, epStatus.DbSize)
+			}
+		}, interval, dbMetricsMonitorJitter, true)
+	}
+
+	return func() {
+		cancel()
+	}, nil
 }

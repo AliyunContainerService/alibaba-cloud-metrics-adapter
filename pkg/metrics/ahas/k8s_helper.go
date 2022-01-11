@@ -1,10 +1,11 @@
 package ahas
 
 import (
+	"context"
 	"errors"
 	"io/ioutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	log "k8s.io/klog"
+	log "k8s.io/klog/v2"
 	"os"
 
 	"k8s.io/client-go/kubernetes"
@@ -55,7 +56,7 @@ func getPilotAnnotationMetadata(namespace string) (*SentinelPilotMetadata, error
 		return nil, errors.New("invalid namespace")
 	}
 	// log.Infoln("Namespace resolved:" + namespace)
-	ds, err := k8sClient.AppsV1().Deployments(namespace).List(metav1.ListOptions{})
+	ds, err := k8sClient.AppsV1().Deployments(namespace).List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}

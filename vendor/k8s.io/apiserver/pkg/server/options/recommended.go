@@ -17,14 +17,20 @@ limitations under the License.
 package options
 
 import (
+	"fmt"
+
 	"github.com/spf13/pflag"
-	"k8s.io/apiserver/pkg/util/feature"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/admission"
+	"k8s.io/apiserver/pkg/features"
 	"k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/storage/storagebackend"
+	"k8s.io/apiserver/pkg/util/feature"
+	utilflowcontrol "k8s.io/apiserver/pkg/util/flowcontrol"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/component-base/featuregate"
+	"k8s.io/klog/v2"
 )
 
 // RecommendedOptions contains the recommended options for running an API server.
@@ -45,14 +51,13 @@ type RecommendedOptions struct {
 	// admission plugin initializers to Admission.ApplyTo.
 	ExtraAdmissionInitializers func(c *server.RecommendedConfig) ([]admission.PluginInitializer, error)
 	Admission                  *AdmissionOptions
-	// ProcessInfo is used to identify events created by the server.
-	ProcessInfo *ProcessInfo
-	Webhook     *WebhookOptions
 	// API Server Egress Selector is used to control outbound traffic from the API Server
 	EgressSelector *EgressSelectorOptions
+	// Traces contains options to control distributed request tracing.
+	Traces *TracingOptions
 }
 
-func NewRecommendedOptions(prefix string, codec runtime.Codec, processInfo *ProcessInfo) *RecommendedOptions {
+func NewRecommendedOptions(prefix string, codec runtime.Codec) *RecommendedOptions {
 	sso := NewSecureServingOptions()
 
 	// We are composing recommended options for an aggregated api-server,
@@ -75,9 +80,8 @@ func NewRecommendedOptions(prefix string, codec runtime.Codec, processInfo *Proc
 		FeatureGate:                feature.DefaultFeatureGate,
 		ExtraAdmissionInitializers: func(c *server.RecommendedConfig) ([]admission.PluginInitializer, error) { return nil, nil },
 		Admission:                  NewAdmissionOptions(),
-		ProcessInfo:                processInfo,
-		Webhook:                    NewWebhookOptions(),
 		EgressSelector:             NewEgressSelectorOptions(),
+		Traces:                     NewTracingOptions(),
 	}
 }
 
@@ -91,6 +95,7 @@ func (o *RecommendedOptions) AddFlags(fs *pflag.FlagSet) {
 	o.CoreAPI.AddFlags(fs)
 	o.Admission.AddFlags(fs)
 	o.EgressSelector.AddFlags(fs)
+	o.Traces.AddFlags(fs)
 }
 
 // ApplyTo adds RecommendedOptions to the server configuration.
@@ -98,6 +103,14 @@ func (o *RecommendedOptions) AddFlags(fs *pflag.FlagSet) {
 func (o *RecommendedOptions) ApplyTo(config *server.RecommendedConfig) error {
 	if err := o.Etcd.ApplyTo(&config.Config); err != nil {
 		return err
+	}
+	if err := o.EgressSelector.ApplyTo(&config.Config); err != nil {
+		return err
+	}
+	if feature.DefaultFeatureGate.Enabled(features.APIServerTracing) {
+		if err := o.Traces.ApplyTo(config.Config.EgressSelector, &config.Config); err != nil {
+			return err
+		}
 	}
 	if err := o.SecureServing.ApplyTo(&config.Config.SecureServing, &config.Config.LoopbackClientConfig); err != nil {
 		return err
@@ -108,7 +121,7 @@ func (o *RecommendedOptions) ApplyTo(config *server.RecommendedConfig) error {
 	if err := o.Authorization.ApplyTo(&config.Config.Authorization); err != nil {
 		return err
 	}
-	if err := o.Audit.ApplyTo(&config.Config, config.ClientConfig, config.SharedInformerFactory, o.ProcessInfo, o.Webhook); err != nil {
+	if err := o.Audit.ApplyTo(&config.Config); err != nil {
 		return err
 	}
 	if err := o.Features.ApplyTo(&config.Config); err != nil {
@@ -122,10 +135,22 @@ func (o *RecommendedOptions) ApplyTo(config *server.RecommendedConfig) error {
 	} else if err := o.Admission.ApplyTo(&config.Config, config.SharedInformerFactory, config.ClientConfig, o.FeatureGate, initializers...); err != nil {
 		return err
 	}
-	if err := o.EgressSelector.ApplyTo(&config.Config); err != nil {
-		return err
-	}
+	if feature.DefaultFeatureGate.Enabled(features.APIPriorityAndFairness) {
+		if config.ClientConfig != nil {
+			if config.MaxRequestsInFlight+config.MaxMutatingRequestsInFlight <= 0 {
+				return fmt.Errorf("invalid configuration: MaxRequestsInFlight=%d and MaxMutatingRequestsInFlight=%d; they must add up to something positive", config.MaxRequestsInFlight, config.MaxMutatingRequestsInFlight)
 
+			}
+			config.FlowControl = utilflowcontrol.New(
+				config.SharedInformerFactory,
+				kubernetes.NewForConfigOrDie(config.ClientConfig).FlowcontrolV1beta1(),
+				config.MaxRequestsInFlight+config.MaxMutatingRequestsInFlight,
+				config.RequestTimeout/4,
+			)
+		} else {
+			klog.Warningf("Neither kubeconfig is provided nor service-account is mounted, so APIPriorityAndFairness will be disabled")
+		}
+	}
 	return nil
 }
 
@@ -140,6 +165,7 @@ func (o *RecommendedOptions) Validate() []error {
 	errors = append(errors, o.CoreAPI.Validate()...)
 	errors = append(errors, o.Admission.Validate()...)
 	errors = append(errors, o.EgressSelector.Validate()...)
+	errors = append(errors, o.Traces.Validate()...)
 
 	return errors
 }

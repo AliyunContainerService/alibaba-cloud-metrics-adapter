@@ -21,6 +21,7 @@ import (
 	"k8s.io/apiserver/pkg/storage"
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 	"k8s.io/apiserver/pkg/storage/storagebackend/factory"
+	"k8s.io/client-go/tools/cache"
 )
 
 // StorageDecorator is a function signature for producing a storage.Interface
@@ -32,7 +33,8 @@ type StorageDecorator func(
 	newFunc func() runtime.Object,
 	newListFunc func() runtime.Object,
 	getAttrsFunc storage.AttrFunc,
-	trigger storage.IndexerFuncs) (storage.Interface, factory.DestroyFunc, error)
+	trigger storage.IndexerFuncs,
+	indexers *cache.Indexers) (storage.Interface, factory.DestroyFunc, error)
 
 // UndecoratedStorage returns the given a new storage from the given config
 // without any decoration.
@@ -43,13 +45,14 @@ func UndecoratedStorage(
 	newFunc func() runtime.Object,
 	newListFunc func() runtime.Object,
 	getAttrsFunc storage.AttrFunc,
-	trigger storage.IndexerFuncs) (storage.Interface, factory.DestroyFunc, error) {
-	return NewRawStorage(config)
+	trigger storage.IndexerFuncs,
+	indexers *cache.Indexers) (storage.Interface, factory.DestroyFunc, error) {
+	return NewRawStorage(config, newFunc)
 }
 
 // NewRawStorage creates the low level kv storage. This is a work-around for current
 // two layer of same storage interface.
 // TODO: Once cacher is enabled on all registries (event registry is special), we will remove this method.
-func NewRawStorage(config *storagebackend.Config) (storage.Interface, factory.DestroyFunc, error) {
-	return factory.Create(*config)
+func NewRawStorage(config *storagebackend.Config, newFunc func() runtime.Object) (storage.Interface, factory.DestroyFunc, error) {
+	return factory.Create(*config, newFunc)
 }

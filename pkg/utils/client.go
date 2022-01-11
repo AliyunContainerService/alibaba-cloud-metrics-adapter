@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"github.com/denverdino/aliyungo/metadata"
 	"io/ioutil"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 	"os"
 	"time"
 )

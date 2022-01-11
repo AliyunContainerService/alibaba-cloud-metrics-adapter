@@ -6,26 +6,23 @@ require (
 	github.com/aliyun/alibaba-cloud-sdk-go v1.61.258
 	github.com/aliyun/aliyun-log-go-sdk v0.1.10
 	github.com/denverdino/aliyungo v0.0.0-20200609114633-3b95b3216337
-	github.com/hashicorp/golang-lru v0.5.4 // indirect
-	github.com/kubernetes-incubator/custom-metrics-apiserver v0.0.0-20200323093244-5046ce1afe6b
-	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
-	github.com/onsi/ginkgo v1.12.0 // indirect
-	github.com/prometheus/client_golang v1.7.0
-	github.com/prometheus/common v0.10.0
+	github.com/onsi/ginkgo v1.16.4
+	github.com/onsi/gomega v1.15.0
+	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/common v0.26.0
 	github.com/smartystreets/assertions v1.0.1 // indirect
-	github.com/stretchr/testify v1.4.0
-	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550 // indirect
-	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
-	gopkg.in/yaml.v2 v2.3.0
-	k8s.io/apimachinery v0.17.3
-	k8s.io/client-go v0.17.3
-	k8s.io/component-base v0.17.3
-	k8s.io/klog v1.0.0
-	k8s.io/metrics v0.17.3
+	github.com/stretchr/testify v1.7.0
+	k8s.io/api v0.22.0
+	k8s.io/apimachinery v0.22.0
+	k8s.io/client-go v0.22.0
+	k8s.io/component-base v0.22.0
+	k8s.io/klog/v2 v2.40.1
+	k8s.io/metrics v0.22.0
+	sigs.k8s.io/custom-metrics-apiserver v1.22.0
+	sigs.k8s.io/prometheus-adapter v0.9.1
 )
 
 replace (
-	// forced by the inclusion of sigs.k8s.io/metrics-server's use of this in their go.mod
-	k8s.io/kubernetes/pkg/kubelet/apis/stats/v1alpha1 => ./localvendor/k8s.io/kubernetes/pkg/kubelet/apis/stats/v1alpha1
-	sigs.k8s.io/metrics-server v0.3.7 => sigs.k8s.io/metrics-server v0.0.0-20200406215547-5fcf6956a533
+	github.com/go-logr/logr => github.com/go-logr/logr v0.4.0
+	k8s.io/klog/v2 => k8s.io/klog/v2 v2.9.0
 )

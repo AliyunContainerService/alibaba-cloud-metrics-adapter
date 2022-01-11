@@ -17,10 +17,10 @@ package alibabaCloudProvider
 
 import (
 	"errors"
-	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
 	"k8s.io/apimachinery/pkg/labels"
-	log "k8s.io/klog"
+	log "k8s.io/klog/v2"
 	"k8s.io/metrics/pkg/apis/external_metrics"
+	p "sigs.k8s.io/custom-metrics-apiserver/pkg/provider"
 )
 
 // return metrics with specific labels

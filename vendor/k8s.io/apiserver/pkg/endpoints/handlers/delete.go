@@ -25,12 +25,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metainternalversionscheme "k8s.io/apimachinery/pkg/apis/meta/internalversion/scheme"
+	metainternalversionvalidation "k8s.io/apimachinery/pkg/apis/meta/internalversion/validation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/validation"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/audit"
+	"k8s.io/apiserver/pkg/endpoints/handlers/finisher"
 	"k8s.io/apiserver/pkg/endpoints/handlers/negotiation"
 	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/features"
@@ -45,24 +47,25 @@ import (
 func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestScope, admit admission.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// For performance tracking purposes.
-		trace := utiltrace.New("Delete", utiltrace.Field{Key: "url", Value: req.URL.Path}, utiltrace.Field{Key: "user-agent", Value: &lazyTruncatedUserAgent{req}}, utiltrace.Field{Key: "client", Value: &lazyClientIP{req}})
+		trace := utiltrace.New("Delete", traceFields(req)...)
 		defer trace.LogIfLong(500 * time.Millisecond)
 
 		if isDryRun(req.URL) && !utilfeature.DefaultFeatureGate.Enabled(features.DryRun) {
-			scope.err(errors.NewBadRequest("the dryRun alpha feature is disabled"), w, req)
+			scope.err(errors.NewBadRequest("the dryRun feature is disabled"), w, req)
 			return
 		}
-
-		// TODO: we either want to remove timeout or document it (if we document, move timeout out of this function and declare it in api_installer)
-		timeout := parseTimeout(req.URL.Query().Get("timeout"))
 
 		namespace, name, err := scope.Namer.Name(req)
 		if err != nil {
 			scope.err(err, w, req)
 			return
 		}
-		ctx, cancel := context.WithTimeout(req.Context(), timeout)
+
+		// enforce a timeout of at most requestTimeoutUpperBound (34s) or less if the user-provided
+		// timeout inside the parent context is lower than requestTimeoutUpperBound.
+		ctx, cancel := context.WithTimeout(req.Context(), requestTimeoutUpperBound)
 		defer cancel()
+
 		ctx = request.WithNamespace(ctx, namespace)
 		ae := request.AuditEventFrom(ctx)
 		admit = admission.WithAudit(admit, ae)
@@ -89,7 +92,7 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 				// For backwards compatibility, we need to allow existing clients to submit per group DeleteOptions
 				// It is also allowed to pass a body with meta.k8s.io/v1.DeleteOptions
 				defaultGVK := scope.MetaGroupVersion.WithKind("DeleteOptions")
-				obj, _, err := metainternalversionscheme.Codecs.DecoderToVersion(s.Serializer, defaultGVK.GroupVersion()).Decode(body, &defaultGVK, options)
+				obj, gvk, err := metainternalversionscheme.Codecs.DecoderToVersion(s.Serializer, defaultGVK.GroupVersion()).Decode(body, &defaultGVK, options)
 				if err != nil {
 					scope.err(err, w, req)
 					return
@@ -101,7 +104,8 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 				trace.Step("Decoded delete options")
 
 				ae := request.AuditEventFrom(ctx)
-				audit.LogRequestObject(ae, obj, scope.Resource, scope.Subresource, scope.Serializer)
+				objGV := gvk.GroupVersion()
+				audit.LogRequestObject(ae, obj, objGV, scope.Resource, scope.Subresource, scope.Serializer)
 				trace.Step("Recorded the audit event")
 			} else {
 				if err := metainternalversionscheme.ParameterCodec.DecodeParameters(req.URL.Query(), scope.MetaGroupVersion, options); err != nil {
@@ -122,7 +126,7 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 		wasDeleted := true
 		userInfo, _ := request.UserFrom(ctx)
 		staticAdmissionAttrs := admission.NewAttributesRecord(nil, nil, scope.Kind, namespace, name, scope.Resource, scope.Subresource, admission.Delete, options, dryrun.IsDryRun(options.DryRun), userInfo)
-		result, err := finishRequest(timeout, func() (runtime.Object, error) {
+		result, err := finisher.FinishRequest(ctx, func() (runtime.Object, error) {
 			obj, deleted, err := r.Delete(ctx, name, rest.AdmissionToValidateObjectDeleteFunc(admit, staticAdmissionAttrs, scope), options)
 			wasDeleted = deleted
 			return obj, err
@@ -140,7 +144,9 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 		// that will break existing clients.
 		// Other cases where resource is not instantly deleted are: namespace deletion
 		// and pod graceful deletion.
-		if !wasDeleted && options.OrphanDependents != nil && *options.OrphanDependents == false {
+		//lint:ignore SA1019 backwards compatibility
+		//nolint: staticcheck
+		if !wasDeleted && options.OrphanDependents != nil && !*options.OrphanDependents {
 			status = http.StatusAccepted
 		}
 		// if the rest.Deleter returns a nil object, fill out a status. Callers may return a valid
@@ -163,16 +169,13 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 // DeleteCollection returns a function that will handle a collection deletion
 func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestScope, admit admission.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		trace := utiltrace.New("Delete", utiltrace.Field{"url", req.URL.Path})
+		trace := utiltrace.New("Delete", traceFields(req)...)
 		defer trace.LogIfLong(500 * time.Millisecond)
 
 		if isDryRun(req.URL) && !utilfeature.DefaultFeatureGate.Enabled(features.DryRun) {
-			scope.err(errors.NewBadRequest("the dryRun alpha feature is disabled"), w, req)
+			scope.err(errors.NewBadRequest("the dryRun feature is disabled"), w, req)
 			return
 		}
-
-		// TODO: we either want to remove timeout or document it (if we document, move timeout out of this function and declare it in api_installer)
-		timeout := parseTimeout(req.URL.Query().Get("timeout"))
 
 		namespace, err := scope.Namer.Namespace(req)
 		if err != nil {
@@ -180,8 +183,11 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(req.Context(), timeout)
+		// enforce a timeout of at most requestTimeoutUpperBound (34s) or less if the user-provided
+		// timeout inside the parent context is lower than requestTimeoutUpperBound.
+		ctx, cancel := context.WithTimeout(req.Context(), requestTimeoutUpperBound)
 		defer cancel()
+
 		ctx = request.WithNamespace(ctx, namespace)
 		ae := request.AuditEventFrom(ctx)
 
@@ -194,6 +200,12 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 		listOptions := metainternalversion.ListOptions{}
 		if err := metainternalversionscheme.ParameterCodec.DecodeParameters(req.URL.Query(), scope.MetaGroupVersion, &listOptions); err != nil {
 			err = errors.NewBadRequest(err.Error())
+			scope.err(err, w, req)
+			return
+		}
+
+		if errs := metainternalversionvalidation.ValidateListOptions(&listOptions); len(errs) > 0 {
+			err := errors.NewInvalid(schema.GroupKind{Group: metav1.GroupName, Kind: "ListOptions"}, "", errs)
 			scope.err(err, w, req)
 			return
 		}
@@ -228,7 +240,7 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 				// For backwards compatibility, we need to allow existing clients to submit per group DeleteOptions
 				// It is also allowed to pass a body with meta.k8s.io/v1.DeleteOptions
 				defaultGVK := scope.Kind.GroupVersion().WithKind("DeleteOptions")
-				obj, _, err := scope.Serializer.DecoderToVersion(s.Serializer, defaultGVK.GroupVersion()).Decode(body, &defaultGVK, options)
+				obj, gvk, err := scope.Serializer.DecoderToVersion(s.Serializer, defaultGVK.GroupVersion()).Decode(body, &defaultGVK, options)
 				if err != nil {
 					scope.err(err, w, req)
 					return
@@ -239,7 +251,8 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 				}
 
 				ae := request.AuditEventFrom(ctx)
-				audit.LogRequestObject(ae, obj, scope.Resource, scope.Subresource, scope.Serializer)
+				objGV := gvk.GroupVersion()
+				audit.LogRequestObject(ae, obj, objGV, scope.Resource, scope.Subresource, scope.Serializer)
 			} else {
 				if err := metainternalversionscheme.ParameterCodec.DecodeParameters(req.URL.Query(), scope.MetaGroupVersion, options); err != nil {
 					err = errors.NewBadRequest(err.Error())
@@ -258,7 +271,7 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 		admit = admission.WithAudit(admit, ae)
 		userInfo, _ := request.UserFrom(ctx)
 		staticAdmissionAttrs := admission.NewAttributesRecord(nil, nil, scope.Kind, namespace, "", scope.Resource, scope.Subresource, admission.Delete, options, dryrun.IsDryRun(options.DryRun), userInfo)
-		result, err := finishRequest(timeout, func() (runtime.Object, error) {
+		result, err := finisher.FinishRequest(ctx, func() (runtime.Object, error) {
 			return r.DeleteCollection(ctx, rest.AdmissionToValidateObjectDeleteFunc(admit, staticAdmissionAttrs, scope), options, &listOptions)
 		})
 		if err != nil {
