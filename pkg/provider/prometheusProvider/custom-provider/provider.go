@@ -144,6 +144,7 @@ func (p *prometheusProvider) buildQuery(ctx context.Context, info provider.Custo
 		return nil, provider.NewMetricNotFoundError(info.GroupResource, info.Metric)
 	}
 
+	klog.V(4).Infof("Custom metrics: %s query: %s", info.Metric, query)
 	// TODO: use an actual context
 	queryResults, err := p.promClient.Query(ctx, pmodel.Now(), query)
 	if err != nil {
