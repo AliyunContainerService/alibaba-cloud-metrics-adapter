@@ -17,10 +17,12 @@ limitations under the License.
 package registry
 
 import (
+	"fmt"
 	"sync"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/registry/generic"
 	"k8s.io/apiserver/pkg/storage"
@@ -28,10 +30,11 @@ import (
 	"k8s.io/apiserver/pkg/storage/etcd3"
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 	"k8s.io/apiserver/pkg/storage/storagebackend/factory"
+	"k8s.io/client-go/tools/cache"
 )
 
 // Creates a cacher based given storageConfig.
-func StorageWithCacher(capacity int) generic.StorageDecorator {
+func StorageWithCacher() generic.StorageDecorator {
 	return func(
 		storageConfig *storagebackend.Config,
 		resourcePrefix string,
@@ -39,24 +42,18 @@ func StorageWithCacher(capacity int) generic.StorageDecorator {
 		newFunc func() runtime.Object,
 		newListFunc func() runtime.Object,
 		getAttrsFunc storage.AttrFunc,
-		triggerFuncs storage.IndexerFuncs) (storage.Interface, factory.DestroyFunc, error) {
+		triggerFuncs storage.IndexerFuncs,
+		indexers *cache.Indexers) (storage.Interface, factory.DestroyFunc, error) {
 
-		s, d, err := generic.NewRawStorage(storageConfig)
+		s, d, err := generic.NewRawStorage(storageConfig, newFunc)
 		if err != nil {
 			return s, d, err
 		}
-		if capacity <= 0 {
-			klog.V(5).Infof("Storage caching is disabled for %T", newFunc())
-			return s, d, nil
-		}
-		if klog.V(5) {
-			klog.Infof("Storage caching is enabled for %T with capacity %v", newFunc(), capacity)
+		if klog.V(5).Enabled() {
+			klog.InfoS("Storage caching is enabled", objectTypeToArgs(newFunc())...)
 		}
 
-		// TODO: we would change this later to make storage always have cacher and hide low level KV layer inside.
-		// Currently it has two layers of same storage interface -- cacher and low level kv.
 		cacherConfig := cacherstorage.Config{
-			CacheCapacity:  capacity,
 			Storage:        s,
 			Versioner:      etcd3.APIObjectVersioner{},
 			ResourcePrefix: resourcePrefix,
@@ -65,6 +62,7 @@ func StorageWithCacher(capacity int) generic.StorageDecorator {
 			NewListFunc:    newListFunc,
 			GetAttrsFunc:   getAttrsFunc,
 			IndexerFuncs:   triggerFuncs,
+			Indexers:       indexers,
 			Codec:          storageConfig.Codec,
 		}
 		cacher, err := cacherstorage.NewCacherFromConfig(cacherConfig)
@@ -83,6 +81,18 @@ func StorageWithCacher(capacity int) generic.StorageDecorator {
 
 		return cacher, destroyFunc, nil
 	}
+}
+
+func objectTypeToArgs(obj runtime.Object) []interface{} {
+	// special-case unstructured objects that tell us their apiVersion/kind
+	if u, isUnstructured := obj.(*unstructured.Unstructured); isUnstructured {
+		if apiVersion, kind := u.GetAPIVersion(), u.GetKind(); len(apiVersion) > 0 && len(kind) > 0 {
+			return []interface{}{"apiVersion", apiVersion, "kind", kind}
+		}
+	}
+
+	// otherwise just return the type
+	return []interface{}{"type", fmt.Sprintf("%T", obj)}
 }
 
 // TODO : Remove all the code below when PR

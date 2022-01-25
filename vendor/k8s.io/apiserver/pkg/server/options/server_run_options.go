@@ -19,15 +19,14 @@ package options
 import (
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/server"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
-
-	// add the generic feature gates
-	"k8s.io/apiserver/pkg/features"
 
 	"github.com/spf13/pflag"
 )
@@ -37,10 +36,12 @@ type ServerRunOptions struct {
 	AdvertiseAddress net.IP
 
 	CorsAllowedOriginList       []string
+	HSTSDirectives              []string
 	ExternalHost                string
 	MaxRequestsInFlight         int
 	MaxMutatingRequestsInFlight int
 	RequestTimeout              time.Duration
+	GoawayChance                float64
 	LivezGracePeriod            time.Duration
 	MinRequestTimeout           int
 	ShutdownDelayDuration       time.Duration
@@ -51,9 +52,8 @@ type ServerRunOptions struct {
 	// decoded in a write request. 0 means no limit.
 	// We intentionally did not add a flag for this option. Users of the
 	// apiserver library can wire it to a flag.
-	MaxRequestBodyBytes        int64
-	TargetRAMMB                int
-	EnableInflightQuotaHandler bool
+	MaxRequestBodyBytes       int64
+	EnablePriorityAndFairness bool
 }
 
 func NewServerRunOptions() *ServerRunOptions {
@@ -67,17 +67,20 @@ func NewServerRunOptions() *ServerRunOptions {
 		ShutdownDelayDuration:       defaults.ShutdownDelayDuration,
 		JSONPatchMaxCopyBytes:       defaults.JSONPatchMaxCopyBytes,
 		MaxRequestBodyBytes:         defaults.MaxRequestBodyBytes,
+		EnablePriorityAndFairness:   true,
 	}
 }
 
-// ApplyOptions applies the run options to the method receiver and returns self
+// ApplyTo applies the run options to the method receiver and returns self
 func (s *ServerRunOptions) ApplyTo(c *server.Config) error {
 	c.CorsAllowedOriginList = s.CorsAllowedOriginList
+	c.HSTSDirectives = s.HSTSDirectives
 	c.ExternalAddress = s.ExternalHost
 	c.MaxRequestsInFlight = s.MaxRequestsInFlight
 	c.MaxMutatingRequestsInFlight = s.MaxMutatingRequestsInFlight
 	c.LivezGracePeriod = s.LivezGracePeriod
 	c.RequestTimeout = s.RequestTimeout
+	c.GoawayChance = s.GoawayChance
 	c.MinRequestTimeout = s.MinRequestTimeout
 	c.ShutdownDelayDuration = s.ShutdownDelayDuration
 	c.JSONPatchMaxCopyBytes = s.JSONPatchMaxCopyBytes
@@ -108,38 +111,24 @@ func (s *ServerRunOptions) DefaultAdvertiseAddress(secure *SecureServingOptions)
 // Validate checks validation of ServerRunOptions
 func (s *ServerRunOptions) Validate() []error {
 	errors := []error{}
-	if s.TargetRAMMB < 0 {
-		errors = append(errors, fmt.Errorf("--target-ram-mb can not be negative value"))
-	}
 
 	if s.LivezGracePeriod < 0 {
 		errors = append(errors, fmt.Errorf("--livez-grace-period can not be a negative value"))
 	}
 
-	if s.EnableInflightQuotaHandler {
-		if !utilfeature.DefaultFeatureGate.Enabled(features.APIPriorityAndFairness) {
-			errors = append(errors, fmt.Errorf("--enable-inflight-quota-handler can not be set if feature "+
-				"gate APIPriorityAndFairness is disabled"))
-		}
-		if s.MaxMutatingRequestsInFlight != 0 {
-			errors = append(errors, fmt.Errorf("--max-mutating-requests-inflight=%v "+
-				"can not be set if enabled inflight quota handler", s.MaxMutatingRequestsInFlight))
-		}
-		if s.MaxRequestsInFlight != 0 {
-			errors = append(errors, fmt.Errorf("--max-requests-inflight=%v "+
-				"can not be set if enabled inflight quota handler", s.MaxRequestsInFlight))
-		}
-	} else {
-		if s.MaxRequestsInFlight < 0 {
-			errors = append(errors, fmt.Errorf("--max-requests-inflight can not be negative value"))
-		}
-		if s.MaxMutatingRequestsInFlight < 0 {
-			errors = append(errors, fmt.Errorf("--max-mutating-requests-inflight can not be negative value"))
-		}
+	if s.MaxRequestsInFlight < 0 {
+		errors = append(errors, fmt.Errorf("--max-requests-inflight can not be negative value"))
+	}
+	if s.MaxMutatingRequestsInFlight < 0 {
+		errors = append(errors, fmt.Errorf("--max-mutating-requests-inflight can not be negative value"))
 	}
 
 	if s.RequestTimeout.Nanoseconds() < 0 {
 		errors = append(errors, fmt.Errorf("--request-timeout can not be negative value"))
+	}
+
+	if s.GoawayChance < 0 || s.GoawayChance > 0.02 {
+		errors = append(errors, fmt.Errorf("--goaway-chance can not be less than 0 or greater than 0.02"))
 	}
 
 	if s.MinRequestTimeout < 0 {
@@ -158,7 +147,29 @@ func (s *ServerRunOptions) Validate() []error {
 		errors = append(errors, fmt.Errorf("--max-resource-write-bytes can not be negative value"))
 	}
 
+	if err := validateHSTSDirectives(s.HSTSDirectives); err != nil {
+		errors = append(errors, err)
+	}
 	return errors
+}
+
+func validateHSTSDirectives(hstsDirectives []string) error {
+	// HSTS Headers format: Strict-Transport-Security:max-age=expireTime [;includeSubDomains] [;preload]
+	// See https://tools.ietf.org/html/rfc6797#section-6.1 for more information
+	allErrors := []error{}
+	for _, hstsDirective := range hstsDirectives {
+		if len(strings.TrimSpace(hstsDirective)) == 0 {
+			allErrors = append(allErrors, fmt.Errorf("empty value in strict-transport-security-directives"))
+			continue
+		}
+		if hstsDirective != "includeSubDomains" && hstsDirective != "preload" {
+			maxAgeDirective := strings.Split(hstsDirective, "=")
+			if len(maxAgeDirective) != 2 || maxAgeDirective[0] != "max-age" {
+				allErrors = append(allErrors, fmt.Errorf("--strict-transport-security-directives invalid, allowed values: max-age=expireTime, includeSubDomains, preload. see https://tools.ietf.org/html/rfc6797#section-6.1 for more information"))
+			}
+		}
+	}
+	return errors.NewAggregate(allErrors)
 }
 
 // AddUniversalFlags adds flags for a specific APIServer to the specified FlagSet
@@ -176,28 +187,44 @@ func (s *ServerRunOptions) AddUniversalFlags(fs *pflag.FlagSet) {
 		"List of allowed origins for CORS, comma separated.  An allowed origin can be a regular "+
 		"expression to support subdomain matching. If this list is empty CORS will not be enabled.")
 
-	fs.IntVar(&s.TargetRAMMB, "target-ram-mb", s.TargetRAMMB,
-		"Memory limit for apiserver in MB (used to configure sizes of caches, etc.)")
+	fs.StringSliceVar(&s.HSTSDirectives, "strict-transport-security-directives", s.HSTSDirectives, ""+
+		"List of directives for HSTS, comma separated. If this list is empty, then HSTS directives will not "+
+		"be added. Example: 'max-age=31536000,includeSubDomains,preload'")
+
+	deprecatedTargetRAMMB := 0
+	fs.IntVar(&deprecatedTargetRAMMB, "target-ram-mb", deprecatedTargetRAMMB,
+		"DEPRECATED: Memory limit for apiserver in MB (used to configure sizes of caches, etc.)")
+	fs.MarkDeprecated("target-ram-mb", "This flag will be removed in v1.23")
 
 	fs.StringVar(&s.ExternalHost, "external-hostname", s.ExternalHost,
-		"The hostname to use when generating externalized URLs for this master (e.g. Swagger API Docs).")
+		"The hostname to use when generating externalized URLs for this master (e.g. Swagger API Docs or OpenID Discovery).")
 
 	deprecatedMasterServiceNamespace := metav1.NamespaceDefault
 	fs.StringVar(&deprecatedMasterServiceNamespace, "master-service-namespace", deprecatedMasterServiceNamespace, ""+
-		"DEPRECATED: the namespace from which the kubernetes master services should be injected into pods.")
+		"DEPRECATED: the namespace from which the Kubernetes master services should be injected into pods.")
 
 	fs.IntVar(&s.MaxRequestsInFlight, "max-requests-inflight", s.MaxRequestsInFlight, ""+
-		"The maximum number of non-mutating requests in flight at a given time. When the server exceeds this, "+
-		"it rejects requests. Zero for no limit.")
+		"This and --max-mutating-requests-inflight are summed to determine the server's total concurrency limit "+
+		"(which must be positive) if --enable-priority-and-fairness is true. "+
+		"Otherwise, this flag limits the maximum number of non-mutating requests in flight, "+
+		"or a zero value disables the limit completely.")
 
 	fs.IntVar(&s.MaxMutatingRequestsInFlight, "max-mutating-requests-inflight", s.MaxMutatingRequestsInFlight, ""+
-		"The maximum number of mutating requests in flight at a given time. When the server exceeds this, "+
-		"it rejects requests. Zero for no limit.")
+		"This and --max-requests-inflight are summed to determine the server's total concurrency limit "+
+		"(which must be positive) if --enable-priority-and-fairness is true. "+
+		"Otherwise, this flag limits the maximum number of mutating requests in flight, "+
+		"or a zero value disables the limit completely.")
 
 	fs.DurationVar(&s.RequestTimeout, "request-timeout", s.RequestTimeout, ""+
 		"An optional field indicating the duration a handler must keep a request open before timing "+
 		"it out. This is the default request timeout for requests but may be overridden by flags such as "+
 		"--min-request-timeout for specific types of requests.")
+
+	fs.Float64Var(&s.GoawayChance, "goaway-chance", s.GoawayChance, ""+
+		"To prevent HTTP/2 clients from getting stuck on a single apiserver, randomly close a connection (GOAWAY). "+
+		"The client's other in-flight requests won't be affected, and the client will reconnect, likely landing on a different apiserver after going through the load balancer again. "+
+		"This argument sets the fraction of requests that will be sent a GOAWAY. Clusters with single apiservers, or which don't use a load balancer, should NOT enable this. "+
+		"Min is 0 (off), Max is .02 (1/50 requests); .001 (1/1000) is a recommended starting point.")
 
 	fs.DurationVar(&s.LivezGracePeriod, "livez-grace-period", s.LivezGracePeriod, ""+
 		"This option represents the maximum amount of time it should take for apiserver to complete its startup sequence "+
@@ -210,12 +237,12 @@ func (s *ServerRunOptions) AddUniversalFlags(fs *pflag.FlagSet) {
 		"handler, which picks a randomized value above this number as the connection timeout, "+
 		"to spread out load.")
 
-	fs.BoolVar(&s.EnableInflightQuotaHandler, "enable-inflight-quota-handler", s.EnableInflightQuotaHandler, ""+
-		"If true, replace the max-in-flight handler with an enhanced one that queues and dispatches with priority and fairness")
+	fs.BoolVar(&s.EnablePriorityAndFairness, "enable-priority-and-fairness", s.EnablePriorityAndFairness, ""+
+		"If true and the APIPriorityAndFairness feature gate is enabled, replace the max-in-flight handler with an enhanced one that queues and dispatches with priority and fairness")
 
 	fs.DurationVar(&s.ShutdownDelayDuration, "shutdown-delay-duration", s.ShutdownDelayDuration, ""+
-		"Time to delay the termination. During that time the server keeps serving requests normally and /healthz "+
-		"returns success, but /readyz immediately returns failure. Graceful termination starts after this delay "+
+		"Time to delay the termination. During that time the server keeps serving requests normally. The endpoints /healthz and /livez "+
+		"will return success, but /readyz immediately returns failure. Graceful termination starts after this delay "+
 		"has elapsed. This can be used to allow load balancer to stop sending traffic to this server.")
 
 	utilfeature.DefaultMutableFeatureGate.AddFlag(fs)

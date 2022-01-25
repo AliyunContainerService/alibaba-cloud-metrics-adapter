@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"encoding/json"
 	"fmt"
 )
 
@@ -39,15 +38,3 @@ const (
 	ResponseError                    = "error"
 )
 
-// APIResponse represents the raw response returned by the API.
-type APIResponse struct {
-	// Status indicates whether this request was successful or whether it errored out.
-	Status ResponseStatus `json:"status"`
-	// Data contains the raw data response for this request.
-	Data json.RawMessage `json:"data"`
-
-	// ErrorType is the type of error, if this is an error response.
-	ErrorType ErrorType `json:"errorType"`
-	// Error is the error message, if this is an error response.
-	Error string `json:"error"`
-}

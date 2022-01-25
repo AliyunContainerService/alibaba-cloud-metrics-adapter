@@ -19,8 +19,6 @@ package dynamiccertificates
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
-	"io/ioutil"
 )
 
 type staticCAContent struct {
@@ -29,19 +27,6 @@ type staticCAContent struct {
 }
 
 var _ CAContentProvider = &staticCAContent{}
-
-// NewStaticCAContentFromFile returns a CAContentProvider based on a filename
-func NewStaticCAContentFromFile(filename string) (CAContentProvider, error) {
-	if len(filename) == 0 {
-		return nil, fmt.Errorf("missing filename for ca bundle")
-	}
-
-	caBundle, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-	return NewStaticCAContent(filename, caBundle)
-}
 
 // NewStaticCAContent returns a CAContentProvider that always returns the same value
 func NewStaticCAContent(name string, caBundle []byte) (CAContentProvider, error) {
@@ -61,6 +46,8 @@ func (c *staticCAContent) Name() string {
 	return c.name
 }
 
+func (c *staticCAContent) AddListener(Listener) {}
+
 // CurrentCABundleContent provides ca bundle byte content
 func (c *staticCAContent) CurrentCABundleContent() (cabundle []byte) {
 	return c.caBundle.caBundle
@@ -76,53 +63,6 @@ type staticCertKeyContent struct {
 	key  []byte
 }
 
-type staticSNICertKeyContent struct {
-	staticCertKeyContent
-	sniNames []string
-}
-
-// NewStaticCertKeyContentFromFiles returns a CertKeyContentProvider based on a filename
-func NewStaticCertKeyContentFromFiles(certFile, keyFile string) (CertKeyContentProvider, error) {
-	if len(certFile) == 0 {
-		return nil, fmt.Errorf("missing filename for certificate")
-	}
-	if len(keyFile) == 0 {
-		return nil, fmt.Errorf("missing filename for key")
-	}
-
-	certPEMBlock, err := ioutil.ReadFile(certFile)
-	if err != nil {
-		return nil, err
-	}
-	keyPEMBlock, err := ioutil.ReadFile(keyFile)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewStaticCertKeyContent(fmt.Sprintf("cert: %s, key: %s", certFile, keyFile), certPEMBlock, keyPEMBlock)
-}
-
-// NewStaticSNICertKeyContentFromFiles returns a SNICertKeyContentProvider based on a filename
-func NewStaticSNICertKeyContentFromFiles(certFile, keyFile string, sniNames ...string) (SNICertKeyContentProvider, error) {
-	if len(certFile) == 0 {
-		return nil, fmt.Errorf("missing filename for certificate")
-	}
-	if len(keyFile) == 0 {
-		return nil, fmt.Errorf("missing filename for key")
-	}
-
-	certPEMBlock, err := ioutil.ReadFile(certFile)
-	if err != nil {
-		return nil, err
-	}
-	keyPEMBlock, err := ioutil.ReadFile(keyFile)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewStaticSNICertKeyContent(fmt.Sprintf("cert: %s, key: %s", certFile, keyFile), certPEMBlock, keyPEMBlock, sniNames...)
-}
-
 // NewStaticCertKeyContent returns a CertKeyContentProvider that always returns the same value
 func NewStaticCertKeyContent(name string, cert, key []byte) (CertKeyContentProvider, error) {
 	// Ensure that the key matches the cert and both are valid
@@ -136,6 +76,23 @@ func NewStaticCertKeyContent(name string, cert, key []byte) (CertKeyContentProvi
 		cert: cert,
 		key:  key,
 	}, nil
+}
+
+// Name is just an identifier
+func (c *staticCertKeyContent) Name() string {
+	return c.name
+}
+
+func (c *staticCertKeyContent) AddListener(Listener) {}
+
+// CurrentCertKeyContent provides cert and key content
+func (c *staticCertKeyContent) CurrentCertKeyContent() ([]byte, []byte) {
+	return c.cert, c.key
+}
+
+type staticSNICertKeyContent struct {
+	staticCertKeyContent
+	sniNames []string
 }
 
 // NewStaticSNICertKeyContent returns a SNICertKeyContentProvider that always returns the same value
@@ -156,16 +113,8 @@ func NewStaticSNICertKeyContent(name string, cert, key []byte, sniNames ...strin
 	}, nil
 }
 
-// Name is just an identifier
-func (c *staticCertKeyContent) Name() string {
-	return c.name
-}
-
-// CurrentCertKeyContent provides cert and key content
-func (c *staticCertKeyContent) CurrentCertKeyContent() ([]byte, []byte) {
-	return c.cert, c.key
-}
-
 func (c *staticSNICertKeyContent) SNINames() []string {
 	return c.sniNames
 }
+
+func (c *staticSNICertKeyContent) AddListener(Listener) {}

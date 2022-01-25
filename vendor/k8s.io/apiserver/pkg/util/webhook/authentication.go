@@ -25,10 +25,17 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	corev1 "k8s.io/api/core/v1"
+	utilnet "k8s.io/apimachinery/pkg/util/net"
+	"k8s.io/apiserver/pkg/features"
+	egressselector "k8s.io/apiserver/pkg/server/egressselector"
+	"k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	"k8s.io/component-base/traces"
 )
 
 // AuthenticationInfoResolverWrapper can be used to inject Dial function to the
@@ -38,7 +45,9 @@ type AuthenticationInfoResolverWrapper func(AuthenticationInfoResolver) Authenti
 // NewDefaultAuthenticationInfoResolverWrapper builds a default authn resolver wrapper
 func NewDefaultAuthenticationInfoResolverWrapper(
 	proxyTransport *http.Transport,
-	kubeapiserverClientConfig *rest.Config) AuthenticationInfoResolverWrapper {
+	egressSelector *egressselector.EgressSelector,
+	kubeapiserverClientConfig *rest.Config,
+	tp *trace.TracerProvider) AuthenticationInfoResolverWrapper {
 
 	webhookAuthResolverWrapper := func(delegate AuthenticationInfoResolver) AuthenticationInfoResolver {
 		return &AuthenticationInfoResolverDelegator{
@@ -46,7 +55,26 @@ func NewDefaultAuthenticationInfoResolverWrapper(
 				if hostPort == "kubernetes.default.svc:443" {
 					return kubeapiserverClientConfig, nil
 				}
-				return delegate.ClientConfigFor(hostPort)
+				ret, err := delegate.ClientConfigFor(hostPort)
+				if err != nil {
+					return nil, err
+				}
+				if feature.DefaultFeatureGate.Enabled(features.APIServerTracing) {
+					ret.Wrap(traces.WrapperFor(tp))
+				}
+
+				if egressSelector != nil {
+					networkContext := egressselector.ControlPlane.AsNetworkContext()
+					var egressDialer utilnet.DialFunc
+					egressDialer, err = egressSelector.Lookup(networkContext)
+
+					if err != nil {
+						return nil, err
+					}
+
+					ret.Dial = egressDialer
+				}
+				return ret, nil
 			},
 			ClientConfigForServiceFunc: func(serviceName, serviceNamespace string, servicePort int) (*rest.Config, error) {
 				if serviceName == "kubernetes" && serviceNamespace == corev1.NamespaceDefault && servicePort == 443 {
@@ -56,10 +84,23 @@ func NewDefaultAuthenticationInfoResolverWrapper(
 				if err != nil {
 					return nil, err
 				}
-				if proxyTransport != nil && proxyTransport.DialContext != nil {
+				if feature.DefaultFeatureGate.Enabled(features.APIServerTracing) {
+					ret.Wrap(traces.WrapperFor(tp))
+				}
+
+				if egressSelector != nil {
+					networkContext := egressselector.Cluster.AsNetworkContext()
+					var egressDialer utilnet.DialFunc
+					egressDialer, err = egressSelector.Lookup(networkContext)
+					if err != nil {
+						return nil, err
+					}
+
+					ret.Dial = egressDialer
+				} else if proxyTransport != nil && proxyTransport.DialContext != nil {
 					ret.Dial = proxyTransport.DialContext
 				}
-				return ret, err
+				return ret, nil
 			},
 		}
 	}

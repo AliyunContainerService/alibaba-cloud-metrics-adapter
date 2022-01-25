@@ -7,9 +7,9 @@ import (
 
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/slb"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/sls"
-	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
+	p "sigs.k8s.io/custom-metrics-apiserver/pkg/provider"
 	"k8s.io/apimachinery/pkg/labels"
-	log "k8s.io/klog"
+	log "k8s.io/klog/v2"
 	"k8s.io/metrics/pkg/apis/external_metrics"
 )
 

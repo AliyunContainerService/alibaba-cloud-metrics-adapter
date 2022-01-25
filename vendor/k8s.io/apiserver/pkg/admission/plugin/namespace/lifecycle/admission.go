@@ -22,7 +22,7 @@ import (
 	"io"
 	"time"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -140,7 +140,7 @@ func (l *Lifecycle) Admit(ctx context.Context, a admission.Attributes, o admissi
 			exists = true
 		}
 		if exists {
-			klog.V(4).Infof("found %s in cache after waiting", a.GetNamespace())
+			klog.V(4).InfoS("Namespace existed in cache after waiting", "namespace", klog.KRef("", a.GetNamespace()))
 		}
 	}
 
@@ -154,14 +154,15 @@ func (l *Lifecycle) Admit(ctx context.Context, a admission.Attributes, o admissi
 	// refuse to operate on non-existent namespaces
 	if !exists || forceLiveLookup {
 		// as a last resort, make a call directly to storage
-		namespace, err = l.client.CoreV1().Namespaces().Get(a.GetNamespace(), metav1.GetOptions{})
+		namespace, err = l.client.CoreV1().Namespaces().Get(context.TODO(), a.GetNamespace(), metav1.GetOptions{})
 		switch {
 		case errors.IsNotFound(err):
 			return err
 		case err != nil:
 			return errors.NewInternalError(err)
 		}
-		klog.V(4).Infof("found %s via storage lookup", a.GetNamespace())
+
+		klog.V(4).InfoS("Found namespace via storage lookup", "namespace", klog.KRef("", a.GetNamespace()))
 	}
 
 	// ensure that we're not trying to create objects in terminating namespaces

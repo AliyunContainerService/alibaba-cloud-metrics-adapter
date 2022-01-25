@@ -9,12 +9,12 @@ import (
 
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/utils"
 	ahas "github.com/aliyun/alibaba-cloud-sdk-go/services/ahas_openapi"
-	"github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
-	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
+	"sigs.k8s.io/custom-metrics-apiserver/pkg/provider"
+	p "sigs.k8s.io/custom-metrics-apiserver/pkg/provider"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	log "k8s.io/klog"
+	log "k8s.io/klog/v2"
 	"k8s.io/metrics/pkg/apis/external_metrics"
 )
 

@@ -1,0 +1,12 @@
+rules:
+  - metricsQuery: sum(rate(<<.Series>>{<<.LabelMatchers>>}[2m])) by (<<.GroupBy>>)
+    name:
+      as: ${1}_per_second
+      matches: ^(.*)_total
+    resources:
+      overrides:
+        kubernetes_namespace:
+          resource: namespace
+        kubernetes_pod_name:
+          resource: pod
+    seriesQuery: http_requests_total{kubernetes_namespace!="",kubernetes_pod_name!=""}

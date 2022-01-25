@@ -2,8 +2,9 @@ package utils
 
 import (
 	"context"
+	"net/url"
 	"time"
-
+	prom "sigs.k8s.io/prometheus-adapter/pkg/client"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -29,10 +30,10 @@ func init() {
 // capturing request latency.
 type instrumentedGenericClient struct {
 	serverName string
-	client     GenericAPIClient
+	client     prom.GenericAPIClient
 }
 
-func (c *instrumentedGenericClient) Do(ctx context.Context, verb, endpoint string, query string) (APIResponse, error) {
+func (c *instrumentedGenericClient) Do(ctx context.Context, verb, endpoint string, query url.Values) (prom.APIResponse, error) {
 	startTime := time.Now()
 	var err error
 	defer func() {
@@ -47,12 +48,11 @@ func (c *instrumentedGenericClient) Do(ctx context.Context, verb, endpoint strin
 		queryLatency.With(prometheus.Labels{"endpoint": endpoint, "server": c.serverName}).Observe(endTime.Sub(startTime).Seconds())
 	}()
 
-	var resp APIResponse
-	resp, err = c.client.Do(ctx, verb, endpoint, query)
+	resp, err := c.client.Do(ctx, verb, endpoint, query)
 	return resp, err
 }
 
-func InstrumentGenericAPIClient(client GenericAPIClient, serverName string) GenericAPIClient {
+func InstrumentGenericAPIClient(client prom.GenericAPIClient, serverName string) prom.GenericAPIClient {
 	return &instrumentedGenericClient{
 		serverName: serverName,
 		client:     client,

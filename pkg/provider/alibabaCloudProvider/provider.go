@@ -17,7 +17,6 @@ package alibabaCloudProvider
 
 import (
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics"
-	p "github.com/kubernetes-incubator/custom-metrics-apiserver/pkg/provider"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/dynamic"
 )
@@ -32,7 +31,7 @@ type AlibabaCloudMetricsProvider struct {
 	// todo custom metrics manager
 }
 
-func NewAlibabaCloudProvider(mapper apimeta.RESTMapper, dynamicClient dynamic.Interface) (p.MetricsProvider, error) {
+func NewAlibabaCloudProvider(mapper apimeta.RESTMapper, dynamicClient dynamic.Interface) (*AlibabaCloudMetricsProvider, error) {
 	return &AlibabaCloudMetricsProvider{
 		mapper:     mapper,
 		kubeClient: dynamicClient,

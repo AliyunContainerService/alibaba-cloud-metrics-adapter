@@ -33,7 +33,7 @@ import (
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 // ConfigMapCAController provies a CAContentProvider that can dynamically react to configmap changes
@@ -58,7 +58,6 @@ type ConfigMapCAController struct {
 	preRunCaches []cache.InformerSynced
 }
 
-var _ Notifier = &ConfigMapCAController{}
 var _ CAContentProvider = &ConfigMapCAController{}
 var _ ControllerRunner = &ConfigMapCAController{}
 
@@ -97,10 +96,7 @@ func NewDynamicCAFromConfigMapController(purpose, namespace, name, key string, k
 		queue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("DynamicConfigMapCABundle-%s", purpose)),
 		preRunCaches: []cache.InformerSynced{uncastConfigmapInformer.HasSynced},
 	}
-	if err := c.loadCABundle(); err != nil {
-		// don't fail, but do print out a message
-		klog.Warningf("unable to load initial CA bundle for: %q due to: %s", c.name, err)
-	}
+
 	uncastConfigmapInformer.AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: func(obj interface{}) bool {
 			if cast, ok := obj.(*corev1.ConfigMap); ok {
@@ -202,8 +198,8 @@ func (c *ConfigMapCAController) Run(workers int, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
 
-	klog.Infof("Starting %s", c.name)
-	defer klog.Infof("Shutting down %s", c.name)
+	klog.InfoS("Starting controller", "name", c.name)
+	defer klog.InfoS("Shutting down controller", "name", c.name)
 
 	// we have a personal informer that is narrowly scoped, start it.
 	go c.configMapInformer.Run(stopCh)
@@ -217,7 +213,7 @@ func (c *ConfigMapCAController) Run(workers int, stopCh <-chan struct{}) {
 	go wait.Until(c.runWorker, time.Second, stopCh)
 
 	// start timer that rechecks every minute, just in case.  this also serves to prime the controller quickly.
-	_ = wait.PollImmediateUntil(FileRefreshDuration, func() (bool, error) {
+	go wait.PollImmediateUntil(FileRefreshDuration, func() (bool, error) {
 		c.queue.Add(workItemKey)
 		return false, nil
 	}, stopCh)

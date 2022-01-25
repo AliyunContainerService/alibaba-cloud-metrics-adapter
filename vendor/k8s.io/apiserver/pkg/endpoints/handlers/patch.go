@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metainternalversionscheme "k8s.io/apimachinery/pkg/apis/meta/internalversion/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/validation"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -37,10 +38,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/audit"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/apiserver/pkg/endpoints/handlers/fieldmanager"
+	"k8s.io/apiserver/pkg/endpoints/handlers/finisher"
 	"k8s.io/apiserver/pkg/endpoints/handlers/negotiation"
 	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/features"
@@ -59,11 +62,11 @@ const (
 func PatchResource(r rest.Patcher, scope *RequestScope, admit admission.Interface, patchTypes []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// For performance tracking purposes.
-		trace := utiltrace.New("Patch", utiltrace.Field{Key: "url", Value: req.URL.Path}, utiltrace.Field{Key: "user-agent", Value: &lazyTruncatedUserAgent{req}}, utiltrace.Field{Key: "client", Value: &lazyClientIP{req}})
+		trace := utiltrace.New("Patch", traceFields(req)...)
 		defer trace.LogIfLong(500 * time.Millisecond)
 
 		if isDryRun(req.URL) && !utilfeature.DefaultFeatureGate.Enabled(features.DryRun) {
-			scope.err(errors.NewBadRequest("the dryRun alpha feature is disabled"), w, req)
+			scope.err(errors.NewBadRequest("the dryRun feature is disabled"), w, req)
 			return
 		}
 
@@ -82,19 +85,17 @@ func PatchResource(r rest.Patcher, scope *RequestScope, admit admission.Interfac
 			return
 		}
 
-		// TODO: we either want to remove timeout or document it (if we
-		// document, move timeout out of this function and declare it in
-		// api_installer)
-		timeout := parseTimeout(req.URL.Query().Get("timeout"))
-
 		namespace, name, err := scope.Namer.Name(req)
 		if err != nil {
 			scope.err(err, w, req)
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(req.Context(), timeout)
+		// enforce a timeout of at most requestTimeoutUpperBound (34s) or less if the user-provided
+		// timeout inside the parent context is lower than requestTimeoutUpperBound.
+		ctx, cancel := context.WithTimeout(req.Context(), requestTimeoutUpperBound)
 		defer cancel()
+
 		ctx = request.WithNamespace(ctx, namespace)
 
 		outputMediaType, _, err := negotiation.NegotiateOutputMediaType(req, scope.Serializer, scope)
@@ -171,6 +172,9 @@ func PatchResource(r rest.Patcher, scope *RequestScope, admit admission.Interfac
 			userInfo,
 		)
 
+		if scope.FieldManager != nil {
+			admit = fieldmanager.NewManagedFieldsValidatingAdmissionController(admit)
+		}
 		mutatingAdmission, _ := admit.(admission.MutationInterface)
 		createAuthorizerAttributes := authorizer.AttributesRecord{
 			User:            userInfo,
@@ -206,7 +210,6 @@ func PatchResource(r rest.Patcher, scope *RequestScope, admit admission.Interfac
 
 			codec: codec,
 
-			timeout: timeout,
 			options: options,
 
 			restPatcher: r,
@@ -269,7 +272,6 @@ type patcher struct {
 
 	codec runtime.Codec
 
-	timeout time.Duration
 	options *metav1.PatchOptions
 
 	// Operation information
@@ -321,9 +323,7 @@ func (p *jsonPatcher) applyPatchToCurrentObject(currentObject runtime.Object) (r
 	}
 
 	if p.fieldManager != nil {
-		if objToUpdate, err = p.fieldManager.Update(currentObject, objToUpdate, managerOrUserAgent(p.options.FieldManager, p.userAgent)); err != nil {
-			return nil, fmt.Errorf("failed to update object (json PATCH for %v) managed fields: %v", p.kind, err)
-		}
+		objToUpdate = p.fieldManager.UpdateNoErrors(currentObject, objToUpdate, managerOrUserAgent(p.options.FieldManager, p.userAgent))
 	}
 	return objToUpdate, nil
 }
@@ -406,9 +406,7 @@ func (p *smpPatcher) applyPatchToCurrentObject(currentObject runtime.Object) (ru
 	}
 
 	if p.fieldManager != nil {
-		if newObj, err = p.fieldManager.Update(currentObject, newObj, managerOrUserAgent(p.options.FieldManager, p.userAgent)); err != nil {
-			return nil, fmt.Errorf("failed to update object (smp PATCH for %v) managed fields: %v", p.kind, err)
-		}
+		newObj = p.fieldManager.UpdateNoErrors(currentObject, newObj, managerOrUserAgent(p.options.FieldManager, p.userAgent))
 	}
 	return newObj, nil
 }
@@ -423,6 +421,7 @@ type applyPatcher struct {
 	creater      runtime.ObjectCreater
 	kind         schema.GroupVersionKind
 	fieldManager *fieldmanager.FieldManager
+	userAgent    string
 }
 
 func (p *applyPatcher) applyPatchToCurrentObject(obj runtime.Object) (runtime.Object, error) {
@@ -433,7 +432,13 @@ func (p *applyPatcher) applyPatchToCurrentObject(obj runtime.Object) (runtime.Ob
 	if p.fieldManager == nil {
 		panic("FieldManager must be installed to run apply")
 	}
-	return p.fieldManager.Apply(obj, p.patch, p.options.FieldManager, force)
+
+	patchObj := &unstructured.Unstructured{Object: map[string]interface{}{}}
+	if err := yaml.Unmarshal(p.patch, &patchObj.Object); err != nil {
+		return nil, errors.NewBadRequest(fmt.Sprintf("error decoding YAML: %v", err))
+	}
+
+	return p.fieldManager.Apply(obj, patchObj, p.options.FieldManager, force)
 }
 
 func (p *applyPatcher) createNewObject() (runtime.Object, error) {
@@ -565,20 +570,46 @@ func (p *patcher) patchResource(ctx context.Context, scope *RequestScope) (runti
 			options:      p.options,
 			creater:      p.creater,
 			kind:         p.kind,
+			userAgent:    p.userAgent,
 		}
 		p.forceAllowCreate = true
 	default:
 		return nil, false, fmt.Errorf("%v: unimplemented patch type", p.patchType)
 	}
+	dedupOwnerReferencesTransformer := func(_ context.Context, obj, _ runtime.Object) (runtime.Object, error) {
+		// Dedup owner references after mutating admission happens
+		dedupOwnerReferencesAndAddWarning(obj, ctx, true)
+		return obj, nil
+	}
 
 	wasCreated := false
-	p.updatedObjectInfo = rest.DefaultUpdatedObjectInfo(nil, p.applyPatch, p.applyAdmission)
-	result, err := finishRequest(p.timeout, func() (runtime.Object, error) {
+	p.updatedObjectInfo = rest.DefaultUpdatedObjectInfo(nil, p.applyPatch, p.applyAdmission, dedupOwnerReferencesTransformer)
+	requestFunc := func() (runtime.Object, error) {
 		// Pass in UpdateOptions to override UpdateStrategy.AllowUpdateOnCreate
 		options := patchToUpdateOptions(p.options)
 		updateObject, created, updateErr := p.restPatcher.Update(ctx, p.name, p.updatedObjectInfo, p.createValidation, p.updateValidation, p.forceAllowCreate, options)
 		wasCreated = created
 		return updateObject, updateErr
+	}
+	result, err := finisher.FinishRequest(ctx, func() (runtime.Object, error) {
+		result, err := requestFunc()
+		// If the object wasn't committed to storage because it's serialized size was too large,
+		// it is safe to remove managedFields (which can be large) and try again.
+		if isTooLargeError(err) && p.patchType != types.ApplyPatchType {
+			if _, accessorErr := meta.Accessor(p.restPatcher.New()); accessorErr == nil {
+				p.updatedObjectInfo = rest.DefaultUpdatedObjectInfo(nil,
+					p.applyPatch,
+					p.applyAdmission,
+					dedupOwnerReferencesTransformer,
+					func(_ context.Context, obj, _ runtime.Object) (runtime.Object, error) {
+						accessor, _ := meta.Accessor(obj)
+						accessor.SetManagedFields(nil)
+						return obj, nil
+					})
+				result, err = requestFunc()
+			}
+		}
+		return result, err
 	})
 	return result, wasCreated, err
 }
