@@ -62,9 +62,9 @@ func (ss *SLSMetricSource) getSLSIngressQuery(params *SLSIngressParams, metricNa
 
 func (ss *SLSMetricSource) getSLSIngressMetrics(namespace string, requirements labels.Requirements, metricName string) (values []external_metrics.ExternalMetricValue, err error) {
 
-	params, err := getSLSParams(requirements)
+	params, err := getSLSIngressParams(requirements)
 	if err != nil {
-		return values, fmt.Errorf("failed to get sls params,because of %v", err)
+		return values, fmt.Errorf("failed to get sls params, because of %v", err)
 	}
 
 	client, err := ss.Client(params.Internal)
@@ -122,5 +122,5 @@ func (ss *SLSMetricSource) getSLSIngressMetrics(namespace string, requirements l
 
 		return values, err
 	}
-	return values, errors.New("Query sls timeout,it might because of too many logs.")
+	return values, fmt.Errorf("query sls timeout, it might because of too many logs")
 }
