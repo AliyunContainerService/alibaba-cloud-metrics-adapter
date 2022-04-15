@@ -84,10 +84,11 @@ func (ss *SLSMetricSource) getSLSScalingMetrics(namespace string, requirements l
 			values = append(values, external_metrics.ExternalMetricValue{
 				MetricName: metricName,
 				// TODO: values format need to be decided
-				Value:     *resource.NewScaledQuantity(int64(val), resource.Scale(-6)),
+				Value:     *resource.NewQuantity(int64(val), resource.DecimalSI),
 				Timestamp: metav1.Unix(ts, 0),
 			})
 		}
+		break
 	}
 	return values, nil
 }
