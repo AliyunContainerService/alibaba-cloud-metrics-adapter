@@ -2,14 +2,15 @@ package sls
 
 import (
 	"fmt"
-	"k8s.io/apimachinery/pkg/labels"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 func TestInvalidGetSLSParams(t *testing.T) {
 	r := make([]labels.Requirement, 0)
 
-	_, e := getSLSParams(r)
+	_, e := getSLSIngressParams(r)
 	if e != nil {
 		t.Log("pass TestInvalidGetSLSParams")
 		return
