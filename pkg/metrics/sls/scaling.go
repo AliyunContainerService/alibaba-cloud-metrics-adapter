@@ -20,7 +20,7 @@ const MLPredQuery string = `
 			join 
 		(select "__tag__:__batch_id__" as batch_id, cast(json_extract(result, '$.time') as bigint) as time, cast(json_extract(result, '$.expect_value') as double) as value 
 			from log where cast(json_extract(result, '$.entity') as varchar)='%s' and cast(json_extract(result, '$.metric') as varchar)='%s' limit 100000) t2 
-	on t1.batch_id=t2.batch_id) where time >= pred_time order by time
+	on t1.batch_id=t2.batch_id) where time > %d order by time
 `
 
 type SLSScalingParams struct {
@@ -34,7 +34,7 @@ func (ss *SLSMetricSource) getSLSScalingQuery(params *SLSScalingParams, metricNa
 
 	switch metricName {
 	case SLS_SCALING:
-		query = fmt.Sprintf(MLPredQuery, params.JobName, params.Entity, params.Metric, params.Entity, params.Metric)
+		query = fmt.Sprintf(MLPredQuery, params.JobName, params.Entity, params.Metric, params.Entity, params.Metric, now)
 	default:
 		err = fmt.Errorf("failed to get ml prediction query: unsupported metric %s(qps)", metricName)
 		log.Errorf(err.Error())
@@ -72,22 +72,21 @@ func (ss *SLSMetricSource) getSLSScalingMetrics(namespace string, requirements l
 			continue
 		}
 
-		for _, log := range resp.Logs {
-			ts, err := strconv.ParseInt(log["time"], 10, 64)
-			if err != nil {
-				return values, err
-			}
-			val, err := strconv.ParseFloat(log["value"], 64)
-			if err != nil {
-				return values, err
-			}
-			values = append(values, external_metrics.ExternalMetricValue{
-				MetricName: metricName,
-				// TODO: values format need to be decided
-				Value:     *resource.NewQuantity(int64(val), resource.DecimalSI),
-				Timestamp: metav1.Unix(ts, 0),
-			})
+		// just reture the next metric
+		log := resp.Logs[0]
+		ts, err := strconv.ParseInt(log["time"], 10, 64)
+		if err != nil {
+			return values, err
 		}
+		val, err := strconv.ParseFloat(log["value"], 64)
+		if err != nil {
+			return values, err
+		}
+		values = append(values, external_metrics.ExternalMetricValue{
+			MetricName: metricName,
+			Value:      *resource.NewQuantity(int64(val), resource.DecimalSI),
+			Timestamp:  metav1.Unix(ts, 0),
+		})
 		break
 	}
 	return values, nil
