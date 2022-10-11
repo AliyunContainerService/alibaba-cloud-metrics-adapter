@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/cost"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/options"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider"
 	"k8s.io/component-base/logs"
@@ -15,6 +16,7 @@ func main() {
 	logs.InitLogs()
 	defer logs.FlushLogs()
 	opts := options.NewAlibabaMetricsAdapterOptions()
+	options.GlobalConfig = opts
 	opts.AddFlags()
 	opts.Flags().AddGoFlagSet(flag.CommandLine)
 	if err := opts.Flags().Parse(os.Args); err != nil {
@@ -38,6 +40,8 @@ func main() {
 	http.HandleFunc("/reload", func(writer http.ResponseWriter, request *http.Request) {
 		os.Exit(0)
 	})
+	// export cost metrics api
+	http.HandleFunc("/cost", cost.Handler)
 	go func() {
 		http.ListenAndServe(":8080", nil)
 	}()
@@ -46,4 +50,3 @@ func main() {
 		klog.Fatalf("Failed to run alibaba-cloud-metrics-adapter: %v", err)
 	}
 }
-

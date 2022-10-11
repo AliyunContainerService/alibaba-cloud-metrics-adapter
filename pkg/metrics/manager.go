@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/ahas"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/cms"
+	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/cost"
 
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/slb"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/sls"
-	p "sigs.k8s.io/custom-metrics-apiserver/pkg/provider"
 	"k8s.io/apimachinery/pkg/labels"
 	log "k8s.io/klog/v2"
 	"k8s.io/metrics/pkg/apis/external_metrics"
+	p "sigs.k8s.io/custom-metrics-apiserver/pkg/provider"
 )
 
 var (
@@ -32,6 +33,7 @@ func init() {
 	register(slb.NewSLBMetricSource())
 	register(cms.NewCMSMetricSource())
 	register(ahas.NewAHASSentinelMetricSource())
+	register(cost.NewCOSTMetricSource())
 }
 
 func GetExternalMetricsManager() *ExternalMetricsManager {
