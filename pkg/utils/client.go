@@ -65,8 +65,15 @@ func GetAccessUserInfo() (accessUserInfo *AccessUserInfo, err error) {
 		}
 	}
 
+	var akFromEnv string = os.Getenv("AccessKeyId")
+	var skFromEnv string = os.Getenv("AccessKeySecret")
 	var akInfo AccessUserInfo
-	if _, err := os.Stat(ConfigPath); err == nil {
+	if akFromEnv != "" && skFromEnv != "" {
+		//使用环境变量ak/sk
+		akInfo.Region = region
+		akInfo.AccessKeyId = akFromEnv
+		akInfo.AccessKeySecret = skFromEnv
+	} else if _, err := os.Stat(ConfigPath); err == nil {
 		//获取token config json
 		encodeTokenCfg, err := ioutil.ReadFile(ConfigPath)
 		if err != nil {
