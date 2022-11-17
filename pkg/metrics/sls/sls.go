@@ -13,6 +13,7 @@ import (
 )
 
 const (
+	SLS_ALB_INGRESS_QPS       = "sls_alb_ingress_qps"
 	SLS_INGRESS_QPS           = "sls_ingress_qps"
 	SLS_INGRESS_LATENCY_AVG   = "sls_ingress_latency_avg"
 	SLS_INGRESS_LATENCY_P50   = "sls_ingress_latency_p50"
@@ -38,6 +39,10 @@ type SLSMetricSource struct{}
 func (ss *SLSMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 	metricInfoList := make([]p.ExternalMetricInfo, 0)
 
+	// alb Ingress QPS
+	metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
+		Metric: SLS_ALB_INGRESS_QPS,
+	})
 	// Ingress QPS
 	metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
 		Metric: SLS_INGRESS_QPS,
