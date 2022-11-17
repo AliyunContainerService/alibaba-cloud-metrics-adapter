@@ -20,6 +20,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+var GlobalConfig *AlibabaMetricsAdapterOptions
+
 type AlibabaMetricsAdapterOptions struct {
 	basecmd.AdapterBase
 	// PrometheusURL is the URL describing how to connect to Prometheus.  Query parameters configure connection options.

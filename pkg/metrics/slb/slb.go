@@ -9,8 +9,8 @@ import (
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/utils"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cms"
-	p "sigs.k8s.io/custom-metrics-apiserver/pkg/provider"
 	"k8s.io/apimachinery/pkg/labels"
+	p "sigs.k8s.io/custom-metrics-apiserver/pkg/provider"
 
 	"strconv"
 	"time"
