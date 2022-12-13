@@ -38,6 +38,10 @@ func (ss *SLSMetricSource) getSLSIngressQuery(params *SLSIngressParams, metricNa
 	}
 	var queryItem string
 	switch metricName {
+	case SLS_ALB_INGRESS_QPS:
+		queryItem = fmt.Sprintf("count(1) / %d", params.Interval)
+		query = fmt.Sprintf("* and slb_pool_name: %s | SELECT %s as value from log WHERE __time__ >= %d  and __time__ < %d", params.Route, queryItem, queryRealBegin, end)
+		return
 	case SLS_INGRESS_QPS:
 		queryItem = fmt.Sprintf("count(1) / %d", params.Interval)
 	case SLS_INGRESS_LATENCY_AVG:

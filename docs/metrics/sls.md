@@ -24,6 +24,7 @@ If your ingress used session sticky, please refer to the configuration below.
 
 | metric name     | description                     | extra params |     
 | --------------- | ------------------------------- | ------------ |
+| sls_alb_ingress_qps | QPS of a alb ingress route |  alb.ingress.route | 
 | sls_ingress_qps | QPS of a specific ingress route |  sls.ingress.route | 
 | sls_ingress_latency_avg | latency of all requests |  sls.ingress.route        | 
 | sls_ingress_latency_p50 | latency of 50% requests|  sls.ingress.route        | 
