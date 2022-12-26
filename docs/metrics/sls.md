@@ -22,16 +22,16 @@ If your ingress used session sticky, please refer to the configuration below.
 
 #### Metrics List 
 
-| metric name     | description                     | extra params |     
-| --------------- | ------------------------------- | ------------ |
-| sls_alb_ingress_qps | QPS of a alb ingress route |  alb.ingress.route | 
-| sls_ingress_qps | QPS of a specific ingress route |  sls.ingress.route | 
-| sls_ingress_latency_avg | latency of all requests |  sls.ingress.route        | 
-| sls_ingress_latency_p50 | latency of 50% requests|  sls.ingress.route        | 
-| sls_ingress_latency_p95 | latency of 95% requests |  sls.ingress.route        | 
-| sls_ingress_latency_p99 | latency of 99% requests |  sls.ingress.route        | 
-| sls_ingress_latency_p9999 | latency of 99.99% requests |  sls.ingress.route        | 
-| sls_ingress_inflow | inflow bandwidth of ingress |  sls.ingress.route        | 
+| metric name     | description                     | extra params      |     
+| --------------- | ------------------------------- |-------------------|
+| sls_alb_ingress_qps | QPS of a alb ingress route | sls.ingress.route | 
+| sls_ingress_qps | QPS of a specific ingress route | sls.ingress.route | 
+| sls_ingress_latency_avg | latency of all requests | sls.ingress.route | 
+| sls_ingress_latency_p50 | latency of 50% requests| sls.ingress.route | 
+| sls_ingress_latency_p95 | latency of 95% requests | sls.ingress.route | 
+| sls_ingress_latency_p99 | latency of 99% requests | sls.ingress.route | 
+| sls_ingress_latency_p9999 | latency of 99.99% requests | sls.ingress.route | 
+| sls_ingress_inflow | inflow bandwidth of ingress | sls.ingress.route | 
 
 #### Example1(Not use session sticky)
 ```yaml
