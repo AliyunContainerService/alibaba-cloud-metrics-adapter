@@ -1,4 +1,4 @@
-package options
+package prometheusProvider
 
 import (
 	"crypto/tls"
@@ -26,6 +26,8 @@ type AlibabaMetricsAdapterOptions struct {
 	basecmd.AdapterBase
 	// PrometheusURL is the URL describing how to connect to Prometheus.  Query parameters configure connection options.
 	PrometheusURL string
+	// PrometheusInsecure is true, skips ssl verification (insecure), default is true.
+	PrometheusInsecure bool
 	// PrometheusAuthInCluster enables using the auth details from the in-cluster kubeconfig to connect to Prometheus
 	PrometheusAuthInCluster bool
 	// PrometheusAuthConf is the kubeconfig file that contains auth details used to connect to Prometheus
@@ -49,6 +51,8 @@ type AlibabaMetricsAdapterOptions struct {
 func (cmd *AlibabaMetricsAdapterOptions) AddFlags() {
 	cmd.Flags().StringVar(&cmd.PrometheusURL, "prometheus-url", cmd.PrometheusURL,
 		"URL for connecting to Prometheus.")
+	cmd.Flags().BoolVar(&cmd.PrometheusInsecure, "prometheus-insecure", true,
+		"skips ssl verification (insecure) when connecting to prometheus.")
 	cmd.Flags().BoolVar(&cmd.PrometheusAuthInCluster, "prometheus-auth-incluster", cmd.PrometheusAuthInCluster,
 		"use auth details from the in-cluster kubeconfig when connecting to prometheus.")
 	cmd.Flags().StringVar(&cmd.PrometheusAuthConf, "prometheus-auth-config", cmd.PrometheusAuthConf,
@@ -91,21 +95,31 @@ func (cmd *AlibabaMetricsAdapterOptions) MakePromClient() (prom.Client, error) {
 	}
 
 	var httpClient *http.Client
-
 	if cmd.PrometheusCAFile != "" {
-		prometheusCAClient, err := makePrometheusCAClient(cmd.PrometheusCAFile)
+		prometheusCAClient, err := makePrometheusCAClient(cmd.PrometheusCAFile, cmd.PrometheusInsecure)
 		if err != nil {
 			return nil, err
 		}
 		httpClient = prometheusCAClient
 		klog.Info("successfully loaded ca from file")
-	} else {
+	} else if cmd.PrometheusAuthInCluster {
 		kubeconfigHTTPClient, err := makeKubeconfigHTTPClient(cmd.PrometheusAuthInCluster, cmd.PrometheusAuthConf)
 		if err != nil {
 			return nil, err
 		}
 		httpClient = kubeconfigHTTPClient
 		klog.Info("successfully using in-cluster auth")
+	} else {
+		// return the default client if we're using no auth
+		//httpClient = http.DefaultClient
+		httpClient = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: cmd.PrometheusInsecure,
+				},
+			},
+		}
+		klog.Infof("successfully using default http client auth. InsecureSkipVerify: %v", cmd.PrometheusInsecure)
 	}
 
 	if cmd.PrometheusTokenFile != "" {
@@ -121,7 +135,7 @@ func (cmd *AlibabaMetricsAdapterOptions) MakePromClient() (prom.Client, error) {
 	return prom.NewClientForAPI(instrumentedGenericPromClient), nil
 }
 
-func makePrometheusCAClient(caFilename string) (*http.Client, error) {
+func makePrometheusCAClient(caFilename string, insecure bool) (*http.Client, error) {
 	data, err := ioutil.ReadFile(caFilename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read prometheus-ca-file: %v", err)
@@ -135,7 +149,8 @@ func makePrometheusCAClient(caFilename string) (*http.Client, error) {
 	return &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				RootCAs: pool,
+				RootCAs:            pool,
+				InsecureSkipVerify: insecure,
 			},
 		},
 	}, nil

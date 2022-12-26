@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
 	"github.com/prometheus/common/model"
 	pmodel "github.com/prometheus/common/model"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
@@ -45,7 +46,9 @@ type COSTParams struct {
 	Label         string
 }
 
-type COSTMetricSource struct{}
+type COSTMetricSource struct {
+	*prometheusProvider.AlibabaMetricsAdapterOptions
+}
 
 //list all external metric
 func (cs *COSTMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
@@ -156,7 +159,7 @@ func getPrometheusSql(metricName string) (item string) {
 
 //get the slb specific metric values
 func (cs *COSTMetricSource) getCOSTMetrics(namespace, metricName string, query prom.Selector) (values []external_metrics.ExternalMetricValue, err error) {
-	client, err := cs.getPrometheusClient()
+	client, err := cs.MakePromClient()
 	if err != nil {
 		log.Errorf("Failed to create prometheus client,because of %v", err)
 		return values, err
@@ -273,5 +276,7 @@ func (cs *COSTMetricSource) convertLabels(inLabels model.Metric) map[string]stri
 }
 
 func NewCOSTMetricSource() *COSTMetricSource {
-	return &COSTMetricSource{}
+	return &COSTMetricSource{
+		prometheusProvider.GlobalConfig,
+	}
 }

@@ -3,8 +3,8 @@ package provider
 import (
 	"context"
 	"fmt"
-	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/options"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/alibabaCloudProvider"
+	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
 	prometheusCustomMetricsProvider "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider/custom-provider"
 	prometheusExternalMetricsProvider "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider/external-provider"
 	"k8s.io/apimachinery/pkg/labels"
@@ -72,7 +72,7 @@ func (pm *providerManager) ListAllExternalMetrics() []p.ExternalMetricInfo {
 	return metrics
 }
 
-func NewProviderManager(opts *options.AlibabaMetricsAdapterOptions, stopCh chan struct{}) (provider.MetricsProvider, error) {
+func NewProviderManager(opts *prometheusProvider.AlibabaMetricsAdapterOptions, stopCh chan struct{}) (provider.MetricsProvider, error) {
 	var prometheusCustomMetricsProviderInstance p.CustomMetricsProvider
 	var prometheusExternalMetricsProviderInstance p.ExternalMetricsProvider
 	var customRunner prometheusCustomMetricsProvider.Runnable
@@ -105,7 +105,6 @@ func NewProviderManager(opts *options.AlibabaMetricsAdapterOptions, stopCh chan 
 	if err != nil {
 		klog.Warningf("failed to load prometheus rules from file: %s", opts.AdapterConfigFile)
 	}
-
 
 	// extract the namers
 	namers, err := naming.NamersFromConfig(opts.MetricsConfig.Rules, mapper)
