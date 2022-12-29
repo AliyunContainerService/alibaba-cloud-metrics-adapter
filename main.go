@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/cost"
-	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/options"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider"
+	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
 	"k8s.io/component-base/logs"
 	"k8s.io/klog/v2"
 	"log"
@@ -15,8 +15,8 @@ import (
 func main() {
 	logs.InitLogs()
 	defer logs.FlushLogs()
-	opts := options.NewAlibabaMetricsAdapterOptions()
-	options.GlobalConfig = opts
+	opts := prometheusProvider.NewAlibabaMetricsAdapterOptions()
+	prometheusProvider.GlobalConfig = opts
 	opts.AddFlags()
 	opts.Flags().AddGoFlagSet(flag.CommandLine)
 	if err := opts.Flags().Parse(os.Args); err != nil {

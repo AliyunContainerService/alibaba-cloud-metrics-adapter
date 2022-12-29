@@ -144,9 +144,10 @@ func (p *prometheusProvider) buildQuery(ctx context.Context, info provider.Custo
 		return nil, provider.NewMetricNotFoundError(info.GroupResource, info.Metric)
 	}
 
-	klog.V(4).Infof("Custom metrics: %s query: %s", info.Metric, query)
+	klog.V(4).Infof("Custom metrics prometheus query: %s query: %s", info.Metric, query)
 	// TODO: use an actual context
 	queryResults, err := p.promClient.Query(ctx, pmodel.Now(), query)
+	klog.V(5).Infof("Custom metrics prometheus query finish: %s query: %s, queryResults: %v, queryErr: %v", info.Metric, query, queryResults, err)
 	if err != nil {
 		klog.Errorf("unable to fetch metrics from prometheus: %v", err)
 		// don't leak implementation details to the user
@@ -157,7 +158,6 @@ func (p *prometheusProvider) buildQuery(ctx context.Context, info provider.Custo
 		klog.Errorf("unexpected results from prometheus: expected %s, got %s on results %v", pmodel.ValVector, queryResults.Type, queryResults)
 		return nil, apierr.NewInternalError(fmt.Errorf("unable to fetch metrics"))
 	}
-
 	return *queryResults.Vector, nil
 }
 
