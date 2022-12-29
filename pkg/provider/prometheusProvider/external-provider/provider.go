@@ -54,6 +54,7 @@ func (p *externalPrometheusProvider) GetExternalMetric(ctx context.Context, name
 	klog.V(4).Infof("External metrics: %s query: %s", info.Metric, selector)
 	// Here is where we're making the query, need to be before here xD
 	queryResults, err := p.promClient.Query(ctx, pmodel.Now(), selector)
+	klog.V(5).Infof("External metrics prometheus query finish: %s query: %s, time: %v, queryResults: %v, queryErr: %v", info.Metric, selector, pmodel.Now(), queryResults, err)
 
 	if err != nil {
 		klog.Errorf("unable to fetch metrics from prometheus: %v", err)
