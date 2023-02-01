@@ -50,7 +50,7 @@ type COSTMetricSource struct {
 	*prometheusProvider.AlibabaMetricsAdapterOptions
 }
 
-//list all external metric
+// list all external metric
 func (cs *COSTMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 	metricInfoList := make([]p.ExternalMetricInfo, 0)
 	var MetricArray = []string{
@@ -78,7 +78,7 @@ func (cs *COSTMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 	return metricInfoList
 }
 
-//according to the incoming label, get the metric..
+// according to the incoming label, get the metric..
 func (cs *COSTMetricSource) GetExternalMetric(info p.ExternalMetricInfo, namespace string, requirements labels.Requirements) (values []external_metrics.ExternalMetricValue, err error) {
 
 	promSql := getPrometheusSql(info.Metric)
@@ -157,9 +157,9 @@ func getPrometheusSql(metricName string) (item string) {
 	return item
 }
 
-//get the slb specific metric values
+// get the slb specific metric values
 func (cs *COSTMetricSource) getCOSTMetrics(namespace, metricName string, query prom.Selector) (values []external_metrics.ExternalMetricValue, err error) {
-	client, err := cs.MakePromClient()
+	client, err := prometheusProvider.GlobalConfig.MakePromClient()
 	if err != nil {
 		log.Errorf("Failed to create prometheus client,because of %v", err)
 		return values, err
