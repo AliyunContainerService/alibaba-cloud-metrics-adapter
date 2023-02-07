@@ -216,6 +216,7 @@ func buildExternalQuery(namespace, promSql string, requirements labels.Requireme
 	labelList := []string{podLabel, namespaceLabel}
 	labelMatches := strings.Join(labelList, ",")
 	externalQuery = prom.Selector(fmt.Sprintf(promSql, labelMatches))
+	klog.V(4).Infof("external query: %s", externalQuery)
 	return externalQuery
 }
 
