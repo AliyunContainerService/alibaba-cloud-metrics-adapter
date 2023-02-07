@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -85,7 +84,7 @@ func (co *CostOptions) getClient() (err error) {
 }
 
 func (co *CostOptions) convertPodCostMap(metricsName string, podMetricsMap map[string]*PodMetrics, metricsList []v1beta1.ExternalMetricValue) map[string]*PodMetrics {
-	klog.Infof("metricsList :%+v", metricsList)
+	klog.V(4).Infof("metricsList :%+v", metricsList)
 	for _, value := range metricsList {
 		pod := value.MetricLabels["pod"]
 		if podMetricsMap[pod] == nil {
@@ -269,16 +268,15 @@ func (co *CostOptions) getCostMetrics(params map[string]string) (podMetricsList 
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
-	res, _ := ioutil.ReadAll(r.Body)
+	res := r.URL.Query()
 	paramsMap := make(map[string]string)
-	err := json.Unmarshal(res, &paramsMap)
-	if err != nil {
-		klog.Errorf("parse params failed,because of %s", err)
+	for k, v := range res{
+		paramsMap[k] = v[0]
 	}
 	var costOptions = CostOptions{}
 	podMetricsList := costOptions.getCostMetrics(paramsMap)
 
 	w.Header().Set("content-type", "application/json")
-	res, _ = json.Marshal(podMetricsList)
-	io.WriteString(w, string(res))
+	p, _ := json.Marshal(podMetricsList)
+	io.WriteString(w, string(p))
 }
