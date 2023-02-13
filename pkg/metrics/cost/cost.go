@@ -35,6 +35,11 @@ const (
 	COST_MIN                = "cost_min"
 	COST_RATIO              = "cost_ratio"
 	COST_PERCOREPRICING     = "cost_percorepricing"
+	COST_TOTAL_HOUR         = "cost_total_hour"
+	COST_TOTAL_MIN          = "cost_total_min"
+	COST_TOTAL_DAY          = "cost_total_day"
+	COST_TOTAL_WEEK         = "cost_total_week"
+	COST_TOTAL_MONTH        = "cost_total_month"
 )
 
 type COSTParams struct {
@@ -69,6 +74,11 @@ func (cs *COSTMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 		COST_MIN,
 		COST_RATIO,
 		COST_PERCOREPRICING,
+		COST_TOTAL_HOUR,
+		COST_TOTAL_MIN,
+		COST_TOTAL_DAY,
+		COST_TOTAL_WEEK,
+		COST_TOTAL_MONTH,
 	}
 	for _, metric := range MetricArray {
 		metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
@@ -83,37 +93,10 @@ func (cs *COSTMetricSource) GetExternalMetric(info p.ExternalMetricInfo, namespa
 
 	promSql := getPrometheusSql(info.Metric)
 	query := buildExternalQuery(namespace, promSql, requirements)
-	switch info.Metric {
-	case COST_CPU_REQUEST:
-		values, err = cs.getCOSTMetrics(namespace, COST_CPU_REQUEST, query)
-	case COST_CPU_LIMIT:
-		values, err = cs.getCOSTMetrics(namespace, COST_CPU_LIMIT, query)
-	case COST_CPU_USAGE:
-		values, err = cs.getCOSTMetrics(namespace, COST_CPU_USAGE, query)
-	case COST_CPU_UTILIZATION:
-		values, err = cs.getCOSTMetrics(namespace, COST_CPU_UTILIZATION, query)
-	case COST_MEMORY_REQUEST:
-		values, err = cs.getCOSTMetrics(namespace, COST_MEMORY_REQUEST, query)
-	case COST_MEMORY_LIMIT:
-		values, err = cs.getCOSTMetrics(namespace, COST_MEMORY_LIMIT, query)
-	case COST_MEMORY_USAGE:
-		values, err = cs.getCOSTMetrics(namespace, COST_MEMORY_USAGE, query)
-	case COST_MEMORY_UTILIZATION:
-		values, err = cs.getCOSTMetrics(namespace, COST_MEMORY_UTILIZATION, query)
-	case COST_HOUR:
-		values, err = cs.getCOSTMetrics(namespace, COST_HOUR, query)
-	case COST_DAY:
-		values, err = cs.getCOSTMetrics(namespace, COST_DAY, query)
-	case COST_WEEK:
-		values, err = cs.getCOSTMetrics(namespace, COST_WEEK, query)
-	case COST_MONTH:
-		values, err = cs.getCOSTMetrics(namespace, COST_MONTH, query)
-	case COST_MIN:
-		values, err = cs.getCOSTMetrics(namespace, COST_MIN, query)
-	case COST_RATIO:
-		values, err = cs.getCOSTMetrics(namespace, COST_RATIO, query)
-	case COST_PERCOREPRICING:
-		values, err = cs.getCOSTMetrics(namespace, COST_PERCOREPRICING, query)
+	if info.Metric == COST_TOTAL_HOUR || info.Metric == COST_TOTAL_MIN || info.Metric == COST_TOTAL_DAY || info.Metric == COST_TOTAL_WEEK || info.Metric == COST_TOTAL_MONTH {
+		values, err = cs.getCOSTMetrics(namespace, info.Metric, prom.Selector(promSql))
+	} else {
+		values, err = cs.getCOSTMetrics(namespace, info.Metric, query)
 	}
 	if err != nil {
 		log.Warningf("Failed to GetExternalMetric %s,because of %v", info.Metric, err)
@@ -140,17 +123,25 @@ func getPrometheusSql(metricName string) (item string) {
 	case COST_MEMORY_UTILIZATION:
 		item = "sum(container_memory_working_set_bytes) by (pod) * on(pod) group_right sum(kube_pod_labels{}) by (pod) / sum(kube_pod_container_resource_requests_memory_bytes{job=\"_kube-state-metrics\"} ) by (pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod)"
 	case COST_HOUR:
-		item = "abs(sum(node_current_price / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"} * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"}) by (pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600)"
+		item = "sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"} * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"}) by (pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
 	case COST_MIN:
-		item = "abs(sum(node_current_price / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"} * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"}) by (pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 60)"
+		item = "sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"} * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"}) by (pod) * on(pod) group_right sum(kube_pod_labels{%}) by (pod) * 60"
 	case COST_DAY:
-		item = "sum(sum_over_time((sum(node_current_price / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[24h:1m])) by(pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 60"
+		item = "sum(sum_over_time((sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[24h:1h])) by(pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
 	case COST_WEEK:
-		item = "sum(sum_over_time((sum(node_current_price / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[168h:1h])) by(pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
+		item = "sum(sum_over_time((sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[168h:1h])) by(pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
 	case COST_MONTH:
-		item = "sum(sum_over_time((sum(node_current_price / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[720h:1h])) by(pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
-	case COST_RATIO:
-		item = ""
+		item = "sum(sum_over_time((sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[720h:1h])) by(pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
+	case COST_TOTAL_HOUR:
+		item = "sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"} * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"} * 3600)"
+	case COST_TOTAL_MIN:
+		item = "sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"} * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"}* 60)"
+	case COST_TOTAL_DAY:
+		item = "sum(sum_over_time((sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[24h:1h])* 3600)"
+	case COST_TOTAL_WEEK:
+		item = "sum(sum_over_time((sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[168h:1h])* 3600)"
+	case COST_TOTAL_MONTH:
+		item = "sum(sum_over_time((sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[720h:1h])* 3600)"
 	case COST_PERCOREPRICING:
 		item = "sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"} * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"}) by (pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) / on(pod) sum(kube_pod_container_resource_requests_cpu_cores) by (pod) * 3600"
 	}
@@ -164,6 +155,7 @@ func (cs *COSTMetricSource) getCOSTMetrics(namespace, metricName string, query p
 		log.Errorf("Failed to create prometheus client,because of %v", err)
 		return values, err
 	}
+	klog.V(4).Infof("externalquery :%+v", query)
 	queryResult, err := client.Query(context.TODO(), pmodel.Now(), query)
 	if err != nil {
 		klog.Errorf("unable to fetch metrics from prometheus: %v", err)
@@ -216,7 +208,6 @@ func buildExternalQuery(namespace, promSql string, requirements labels.Requireme
 	labelList := []string{podLabel, namespaceLabel}
 	labelMatches := strings.Join(labelList, ",")
 	externalQuery = prom.Selector(fmt.Sprintf(promSql, labelMatches))
-	klog.V(4).Infof("external query: %s", externalQuery)
 	return externalQuery
 }
 

@@ -25,7 +25,8 @@ type CostOptions struct {
 	externalClient externalclient.ExternalMetricsClient
 }
 
-//
+var CostTotal v1beta1.ExternalMetricValue
+
 type PodMetrics struct {
 	Metadata `json:"metadata"`
 	Request  `json:"request"`
@@ -84,10 +85,9 @@ func (co *CostOptions) getClient() (err error) {
 }
 
 func (co *CostOptions) convertPodCostMap(metricsName string, podMetricsMap map[string]*PodMetrics, metricsList []v1beta1.ExternalMetricValue) map[string]*PodMetrics {
-	klog.V(4).Infof("metricsList :%+v", metricsList)
 	for _, value := range metricsList {
 		pod := value.MetricLabels["pod"]
-		if podMetricsMap[pod] == nil {
+		if podMetricsMap[pod] == nil && pod != "" {
 			podMetricsMap[pod] = &PodMetrics{}
 			podMetricsMap[pod].Metadata.PodName = value.MetricLabels["pod"]
 			podMetricsMap[pod].Metadata.TimeUnit = co.TimeUnit
@@ -113,6 +113,7 @@ func (co *CostOptions) convertPodCostMap(metricsName string, podMetricsMap map[s
 			singlePodMetrics.Usage.CPU = float64(value.Value.MilliValue()) / 1000
 		case COST_HOUR, COST_DAY, COST_WEEK, COST_MONTH:
 			singlePodMetrics.Cost = float64(value.Value.MilliValue()) / 1000
+			singlePodMetrics.CostRatio = float64(value.Value.MilliValue()) / float64(CostTotal.Value.MilliValue())
 		}
 	}
 	return podMetricsMap
@@ -138,6 +139,7 @@ func (co *CostOptions) convertCostSummaryMap(metricName string, podMetric PodMet
 		podMetric.PerCorePricing = float64(metric.Value.MilliValue()) / 1000
 	case COST_HOUR, COST_DAY, COST_WEEK, COST_MONTH:
 		podMetric.Cost = float64(metric.Value.MilliValue()) / 1000
+		podMetric.CostRatio = float64(metric.Value.MilliValue()) / float64(CostTotal.Value.MilliValue())
 		podMetric.Metadata.Timestamp = metric.Timestamp
 		podMetric.Metadata.TimeUnit = co.TimeUnit
 		podMetric.Metadata.DimensionType = co.DimensionType
@@ -180,7 +182,11 @@ func (co *CostOptions) DescribePodCostDetail(namespace string, labelMatch labels
 		if err != nil {
 			klog.Errorf("unable to fetch metrics %s from apiServer: %v", metricName, err)
 		}
-		podMetricsMap = co.convertPodCostMap(metricName, podMetricsMap, metrics.Items)
+		if metricName == fmt.Sprintf("cost_total_%s", co.TimeUnit) {
+			CostTotal = metrics.Items[0]
+		} else {
+			podMetricsMap = co.convertPodCostMap(metricName, podMetricsMap, metrics.Items)
+		}
 	}
 	for _, value := range podMetricsMap {
 		podMetricsList = append(podMetricsList, *value)
@@ -257,7 +263,8 @@ func (co *CostOptions) getCostMetrics(params map[string]string) (podMetricsList 
 		klog.Errorf("failed parse labelMatches: %v", err)
 	}
 
-	metricList := []string{"cost_cpu_request", "cost_cpu_limit", "cost_memory_request", "cost_memory_limit", "cost_memory_usage", "cost_percorepricing", "cost_cpu_usage"}
+	metricList := []string{"cost_cpu_request", "cost_cpu_limit", "cost_memory_request", "cost_memory_limit", "cost_memory_usage", "cost_cpu_usage", "cost_percorepricing"}
+	metricList = append(metricList, fmt.Sprintf("cost_total_%s", co.TimeUnit))
 	metricList = append(metricList, fmt.Sprintf("cost_%s", co.TimeUnit))
 	if co.Summary == true {
 		podMetricsList = co.DescribeCostSummary(namespace, labelMatch, metricList)
@@ -270,12 +277,11 @@ func (co *CostOptions) getCostMetrics(params map[string]string) (podMetricsList 
 func Handler(w http.ResponseWriter, r *http.Request) {
 	res := r.URL.Query()
 	paramsMap := make(map[string]string)
-	for k, v := range res{
+	for k, v := range res {
 		paramsMap[k] = v[0]
 	}
 	var costOptions = CostOptions{}
 	podMetricsList := costOptions.getCostMetrics(paramsMap)
-
 	w.Header().Set("content-type", "application/json")
 	p, _ := json.Marshal(podMetricsList)
 	io.WriteString(w, string(p))
