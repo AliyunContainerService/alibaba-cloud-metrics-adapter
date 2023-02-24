@@ -12,6 +12,7 @@ import (
 	"k8s.io/metrics/pkg/apis/external_metrics/v1beta1"
 	externalclient "k8s.io/metrics/pkg/client/external_metrics"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -84,6 +85,16 @@ func (co *CostOptions) getClient() (err error) {
 	return nil
 }
 
+func parseMetricValue(metricValue float64) float64 {
+	value, err := strconv.ParseFloat(fmt.Sprintf("%.3f", metricValue), 64)
+	if err != nil {
+		klog.Error("")
+		return metricValue
+	}
+	return value
+
+}
+
 func (co *CostOptions) convertPodCostMap(metricsName string, podMetricsMap map[string]*PodMetrics, metricsList []v1beta1.ExternalMetricValue) map[string]*PodMetrics {
 	for _, value := range metricsList {
 		pod := value.MetricLabels["pod"]
@@ -98,22 +109,22 @@ func (co *CostOptions) convertPodCostMap(metricsName string, podMetricsMap map[s
 		singlePodMetrics := podMetricsMap[pod]
 		switch value.MetricName {
 		case COST_MEMORY_REQUEST:
-			singlePodMetrics.Request.Memory = float64(value.Value.MilliValue()) / 1000 / 1024
+			singlePodMetrics.Request.Memory = parseMetricValue(float64(value.Value.MilliValue()) / 1000 / 1024)
 		case COST_MEMORY_LIMIT:
-			singlePodMetrics.Limit.Memory = float64(value.Value.MilliValue()) / 1000 / 1024
+			singlePodMetrics.Limit.Memory = parseMetricValue(float64(value.Value.MilliValue()) / 1000 / 1024)
 		case COST_MEMORY_USAGE:
-			singlePodMetrics.Usage.Memory = float64(value.Value.MilliValue()) / 1000 / 1024
+			singlePodMetrics.Usage.Memory = parseMetricValue(float64(value.Value.MilliValue()) / 1000 / 1024)
 		case COST_PERCOREPRICING:
-			singlePodMetrics.PerCorePricing = float64(value.Value.MilliValue()) / 1000
+			singlePodMetrics.PerCorePricing = parseMetricValue(float64(value.Value.MilliValue()) / 1000)
 		case COST_CPU_REQUEST:
-			singlePodMetrics.Request.CPU = float64(value.Value.MilliValue()) / 1000
+			singlePodMetrics.Request.CPU = parseMetricValue(float64(value.Value.MilliValue()) / 1000)
 		case COST_CPU_LIMIT:
-			singlePodMetrics.Limit.Memory = float64(value.Value.MilliValue()) / 1000
+			singlePodMetrics.Limit.Memory = parseMetricValue(float64(value.Value.MilliValue()) / 1000)
 		case COST_CPU_USAGE:
-			singlePodMetrics.Usage.CPU = float64(value.Value.MilliValue()) / 1000
+			singlePodMetrics.Usage.CPU = parseMetricValue(float64(value.Value.MilliValue()) / 1000)
 		case COST_HOUR, COST_DAY, COST_WEEK, COST_MONTH:
-			singlePodMetrics.Cost = float64(value.Value.MilliValue()) / 1000
-			singlePodMetrics.CostRatio = float64(value.Value.MilliValue()) / float64(CostTotal.Value.MilliValue())
+			singlePodMetrics.Cost = parseMetricValue(float64(value.Value.MilliValue()) / 1000)
+			singlePodMetrics.CostRatio = parseMetricValue(float64(value.Value.MilliValue()) / float64(CostTotal.Value.MilliValue()))
 		}
 	}
 	return podMetricsMap
@@ -124,22 +135,22 @@ func (co *CostOptions) convertCostSummaryMap(metricName string, podMetric PodMet
 
 	switch metricName {
 	case COST_CPU_REQUEST:
-		podMetric.Request.CPU = float64(metric.Value.MilliValue()) / 1000
+		podMetric.Request.CPU = parseMetricValue(float64(metric.Value.MilliValue()) / 1000)
 	case COST_CPU_LIMIT:
-		podMetric.Limit.Memory = float64(metric.Value.MilliValue()) / 1000
+		podMetric.Limit.Memory = parseMetricValue(float64(metric.Value.MilliValue()) / 1000)
 	case COST_CPU_USAGE:
-		podMetric.Usage.CPU = float64(metric.Value.MilliValue()) / 1000
+		podMetric.Usage.CPU = parseMetricValue(float64(metric.Value.MilliValue()) / 1000)
 	case COST_MEMORY_REQUEST:
-		podMetric.Request.Memory = float64(metric.Value.MilliValue()) / 1000 / 1024
+		podMetric.Request.Memory = parseMetricValue(float64(metric.Value.MilliValue()) / 1000 / 1024)
 	case COST_MEMORY_LIMIT:
-		podMetric.Limit.Memory = float64(metric.Value.MilliValue()) / 1000 / 1024
+		podMetric.Limit.Memory = parseMetricValue(float64(metric.Value.MilliValue()) / 1000 / 1024)
 	case COST_MEMORY_USAGE:
-		podMetric.Usage.Memory = float64(metric.Value.MilliValue()) / 1000 / 1024
+		podMetric.Usage.Memory = parseMetricValue(float64(metric.Value.MilliValue()) / 1000 / 1024)
 	case COST_PERCOREPRICING:
-		podMetric.PerCorePricing = float64(metric.Value.MilliValue()) / 1000
+		podMetric.PerCorePricing = parseMetricValue(float64(metric.Value.MilliValue()) / 1000)
 	case COST_HOUR, COST_DAY, COST_WEEK, COST_MONTH:
-		podMetric.Cost = float64(metric.Value.MilliValue()) / 1000
-		podMetric.CostRatio = float64(metric.Value.MilliValue()) / float64(CostTotal.Value.MilliValue())
+		podMetric.Cost = parseMetricValue(float64(metric.Value.MilliValue()) / 1000)
+		podMetric.CostRatio = parseMetricValue(float64(metric.Value.MilliValue()) / float64(CostTotal.Value.MilliValue()))
 		podMetric.Metadata.Timestamp = metric.Timestamp
 		podMetric.Metadata.TimeUnit = co.TimeUnit
 		podMetric.Metadata.DimensionType = co.DimensionType
