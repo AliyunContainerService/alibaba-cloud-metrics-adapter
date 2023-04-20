@@ -28,6 +28,7 @@ const (
 	COST_MEMORY_LIMIT       = "cost_memory_limit"
 	COST_MEMORY_USAGE       = "cost_memory_usage"
 	COST_MEMORY_UTILIZATION = "cost_memory_utilization"
+	COST                    = "cost"
 	COST_HOUR               = "cost_hour"
 	COST_DAY                = "cost_day"
 	COST_WEEK               = "cost_week"
@@ -35,21 +36,13 @@ const (
 	COST_MIN                = "cost_min"
 	COST_RATIO              = "cost_ratio"
 	COST_PERCOREPRICING     = "cost_percorepricing"
+	COST_TOTAL              = "cost_total"
 	COST_TOTAL_HOUR         = "cost_total_hour"
 	COST_TOTAL_MIN          = "cost_total_min"
 	COST_TOTAL_DAY          = "cost_total_day"
 	COST_TOTAL_WEEK         = "cost_total_week"
 	COST_TOTAL_MONTH        = "cost_total_month"
 )
-
-type COSTParams struct {
-	DimensionType string
-	Dimension     string
-	TimeUnit      string
-	StartTime     string
-	EndTime       string
-	Label         string
-}
 
 type COSTMetricSource struct {
 	*prometheusProvider.AlibabaMetricsAdapterOptions
@@ -67,6 +60,7 @@ func (cs *COSTMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 		COST_MEMORY_LIMIT,
 		COST_MEMORY_USAGE,
 		COST_MEMORY_UTILIZATION,
+		COST,
 		COST_HOUR,
 		COST_DAY,
 		COST_WEEK,
@@ -74,6 +68,7 @@ func (cs *COSTMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 		COST_MIN,
 		COST_RATIO,
 		COST_PERCOREPRICING,
+		COST_TOTAL,
 		COST_TOTAL_HOUR,
 		COST_TOTAL_MIN,
 		COST_TOTAL_DAY,
@@ -88,12 +83,12 @@ func (cs *COSTMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 	return metricInfoList
 }
 
-// according to the incoming label, get the metric..
+// according to the incoming label, get the metric.
 func (cs *COSTMetricSource) GetExternalMetric(info p.ExternalMetricInfo, namespace string, requirements labels.Requirements) (values []external_metrics.ExternalMetricValue, err error) {
 
 	promSql := getPrometheusSql(info.Metric)
 	query := buildExternalQuery(namespace, promSql, requirements)
-	if info.Metric == COST_TOTAL_HOUR || info.Metric == COST_TOTAL_MIN || info.Metric == COST_TOTAL_DAY || info.Metric == COST_TOTAL_WEEK || info.Metric == COST_TOTAL_MONTH {
+	if info.Metric == COST_TOTAL || info.Metric == COST_TOTAL_HOUR || info.Metric == COST_TOTAL_MIN || info.Metric == COST_TOTAL_DAY || info.Metric == COST_TOTAL_WEEK || info.Metric == COST_TOTAL_MONTH {
 		values, err = cs.getCOSTMetrics(namespace, info.Metric, prom.Selector(promSql))
 	} else {
 		values, err = cs.getCOSTMetrics(namespace, info.Metric, query)
@@ -122,6 +117,8 @@ func getPrometheusSql(metricName string) (item string) {
 		item = "sum(container_memory_working_set_bytes) by (pod)  * on(pod) group_right sum(kube_pod_labels{%s}) by(pod)"
 	case COST_MEMORY_UTILIZATION:
 		item = "sum(container_memory_working_set_bytes) by (pod) * on(pod) group_right sum(kube_pod_labels{}) by (pod) / sum(kube_pod_container_resource_requests_memory_bytes{job=\"_kube-state-metrics\"} ) by (pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod)"
+	case COST:
+		item = "sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"} * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"}) by (pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod)"
 	case COST_HOUR:
 		item = "sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"} * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"}) by (pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
 	case COST_MIN:
@@ -132,6 +129,8 @@ func getPrometheusSql(metricName string) (item string) {
 		item = "sum(sum_over_time((sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[168h:1h])) by(pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
 	case COST_MONTH:
 		item = "sum(sum_over_time((sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[720h:1h])) by(pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
+	case COST_TOTAL:
+		item = "sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"} * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})"
 	case COST_TOTAL_HOUR:
 		item = "sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"} * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"} * 3600)"
 	case COST_TOTAL_MIN:
@@ -148,21 +147,49 @@ func getPrometheusSql(metricName string) (item string) {
 	return item
 }
 
-// get the slb specific metric values
+// get the cost specific metric values
 func (cs *COSTMetricSource) getCOSTMetrics(namespace, metricName string, query prom.Selector) (values []external_metrics.ExternalMetricValue, err error) {
 	client, err := prometheusProvider.GlobalConfig.MakePromClient()
 	if err != nil {
 		log.Errorf("Failed to create prometheus client,because of %v", err)
 		return values, err
 	}
-	klog.V(4).Infof("externalquery :%+v", query)
-	queryResult, err := client.Query(context.TODO(), pmodel.Now(), query)
-	if err != nil {
-		klog.Errorf("unable to fetch metrics from prometheus: %v", err)
-		return nil, apierr.NewInternalError(fmt.Errorf("unable to fetch metrics"))
+
+	klog.Infof("start : %v , end %v, step %v", RangeParam.StartTime, RangeParam.EndTime, RangeParam.Step)
+	if RangeParam.Range {
+		r := prom.Range{
+			pmodel.TimeFromUnixNano(RangeParam.StartTime.UnixNano()), pmodel.TimeFromUnixNano(RangeParam.EndTime.UnixNano()),
+			RangeParam.Step,
+		}
+		klog.V(4).Infof("queryrange externalquery :%+v", query)
+		queryResult, err := client.QueryRange(context.TODO(), r, query)
+		if err != nil {
+			klog.Errorf("unable to fetch metrics from prometheus: %v", err)
+			return nil, apierr.NewInternalError(fmt.Errorf("unable to fetch metrics"))
+		}
+
+		values, err = cs.convertMatrix(metricName, queryResult)
+		if err != nil {
+			klog.Errorf("unable to convert metrics: %v", err)
+			return nil, err
+		}
+
+	} else {
+		klog.V(4).Infof("externalquery :%+v", query)
+		queryResult, err := client.Query(context.TODO(), pmodel.Now(), query)
+		if err != nil {
+			klog.Errorf("unable to fetch metrics from prometheus: %v", err)
+			return nil, apierr.NewInternalError(fmt.Errorf("unable to fetch metrics"))
+		}
+
+		values, err = cs.convertVector(metricName, queryResult)
+		if err != nil {
+			klog.Errorf("unable to convert metrics: %v", err)
+			return nil, err
+		}
 	}
 
-	return cs.convertVector(metricName, queryResult)
+	return values, nil
 }
 
 func (cs *COSTMetricSource) convertVector(metricName string, queryResult prom.QueryResult) (value []external_metrics.ExternalMetricValue, err error) {
@@ -185,6 +212,34 @@ func (cs *COSTMetricSource) convertVector(metricName string, queryResult prom.Qu
 
 	for _, val := range toConvert {
 		singleMetric, err := cs.convertSample(metricName, val)
+		if err != nil {
+			return nil, fmt.Errorf("unable to convert vector: %v", err)
+		}
+		items = append(items, *singleMetric)
+	}
+	return items, nil
+}
+
+func (cs *COSTMetricSource) convertMatrix(metricName string, queryResult prom.QueryResult) (value []external_metrics.ExternalMetricValue, err error) {
+	if queryResult.Type != model.ValMatrix {
+		return nil, errors.New("incorrect queryrange result type")
+	}
+
+	toConvert := *queryResult.Matrix
+
+	if toConvert == nil {
+		return nil, errors.New("the provided input did not contain vector queryrange results")
+	}
+
+	items := []external_metrics.ExternalMetricValue{}
+
+	numSamples := toConvert.Len()
+	if numSamples == 0 {
+		return items, nil
+	}
+
+	for _, val := range toConvert {
+		singleMetric, err := cs.convertSampleStream(metricName, val)
 		if err != nil {
 			return nil, fmt.Errorf("unable to convert vector: %v", err)
 		}
@@ -243,6 +298,23 @@ func convertPodLabels(labelMap map[string][]string) (podLabel string) {
 	}
 	podLabel = strings.Join(podLabelList, ",")
 	return podLabel
+}
+
+func (cs *COSTMetricSource) convertSampleStream(metricName string, sampleStream *model.SampleStream) (*external_metrics.ExternalMetricValue, error) {
+	label := cs.convertLabels(sampleStream.Metric)
+	SamplePairSum := float64(0)
+	for _, v := range sampleStream.Values {
+		SamplePairSum += float64(v.Value)
+	}
+	singleMetric := external_metrics.ExternalMetricValue{
+		MetricName: metricName,
+		Timestamp: metav1.Time{
+			sampleStream.Values[len(sampleStream.Values)-1].Timestamp.Time(),
+		},
+		Value:        *resource.NewMilliQuantity(int64(SamplePairSum*1000.0), resource.DecimalSI),
+		MetricLabels: label,
+	}
+	return &singleMetric, nil
 }
 
 func (cs *COSTMetricSource) convertSample(metricName string, sample *model.Sample) (*external_metrics.ExternalMetricValue, error) {

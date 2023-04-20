@@ -23,10 +23,21 @@ type CostOptions struct {
 	Dimension      string
 	LabelSelector  string
 	TimeUnit       string
+	StartTime      string
+	EndTime        string
+	Step           int
 	externalClient externalclient.ExternalMetricsClient
 }
 
 var CostTotal v1beta1.ExternalMetricValue
+var RangeParam RangeParams
+
+type RangeParams struct {
+	StartTime time.Time
+	EndTime   time.Time
+	Step      time.Duration
+	Range     bool
+}
 
 type PodMetrics struct {
 	Metadata `json:"metadata"`
@@ -85,6 +96,7 @@ func (co *CostOptions) getClient() (err error) {
 	return nil
 }
 
+// retain three decimal places
 func parseMetricValue(metricValue float64) float64 {
 	value, err := strconv.ParseFloat(fmt.Sprintf("%.3f", metricValue), 64)
 	if err != nil {
@@ -122,7 +134,7 @@ func (co *CostOptions) convertPodCostMap(metricsName string, podMetricsMap map[s
 			singlePodMetrics.Limit.Memory = parseMetricValue(float64(value.Value.MilliValue()) / 1000)
 		case COST_CPU_USAGE:
 			singlePodMetrics.Usage.CPU = parseMetricValue(float64(value.Value.MilliValue()) / 1000)
-		case COST_HOUR, COST_DAY, COST_WEEK, COST_MONTH:
+		case COST, COST_HOUR, COST_DAY, COST_WEEK, COST_MONTH:
 			singlePodMetrics.Cost = parseMetricValue(float64(value.Value.MilliValue()) / 1000)
 			singlePodMetrics.CostRatio = parseMetricValue(float64(value.Value.MilliValue()) / float64(CostTotal.Value.MilliValue()))
 		}
@@ -148,7 +160,7 @@ func (co *CostOptions) convertCostSummaryMap(metricName string, podMetric PodMet
 		podMetric.Usage.Memory = parseMetricValue(float64(metric.Value.MilliValue()) / 1000 / 1024)
 	case COST_PERCOREPRICING:
 		podMetric.PerCorePricing = parseMetricValue(float64(metric.Value.MilliValue()) / 1000)
-	case COST_HOUR, COST_DAY, COST_WEEK, COST_MONTH:
+	case COST, COST_HOUR, COST_DAY, COST_WEEK, COST_MONTH:
 		podMetric.Cost = parseMetricValue(float64(metric.Value.MilliValue()) / 1000)
 		podMetric.CostRatio = parseMetricValue(float64(metric.Value.MilliValue()) / float64(CostTotal.Value.MilliValue()))
 		podMetric.Metadata.Timestamp = metric.Timestamp
@@ -171,29 +183,31 @@ func (co *CostOptions) buildMetricSummary(metricName string, metricList *v1beta1
 	}
 }
 
-func (co *CostOptions) DescribeCostSummary(namespace string, labelMatch labels.Selector, metricList []string) (podMetricsList []PodMetrics) {
+func (co *CostOptions) DescribeCostSummary(namespace string, labelMatch labels.Selector, metricList []string) (podMetricsList []PodMetrics, err error) {
 	var podMetric PodMetrics
 	for _, metricName := range metricList {
 		metrics, err := co.externalClient.NamespacedMetrics(namespace).List(metricName, labelMatch)
 		if err != nil {
 			klog.Errorf("unable to fetch metrics from apiServer: %v", err)
+			return nil, err
 		}
 		podMetric = co.convertCostSummaryMap(metricName, podMetric, metrics)
 	}
 	podMetricsList = []PodMetrics{podMetric}
-	return podMetricsList
+	return podMetricsList, nil
 }
 
 // DescribePodCostDetail convergence all pod detail cost metric
-func (co *CostOptions) DescribePodCostDetail(namespace string, labelMatch labels.Selector, metricList []string) (podMetricsList []PodMetrics) {
+func (co *CostOptions) DescribePodCostDetail(namespace string, labelMatch labels.Selector, metricList []string) (podMetricsList []PodMetrics, err error) {
 	var podMetricsMap map[string]*PodMetrics
 	podMetricsMap = make(map[string]*PodMetrics)
 	for _, metricName := range metricList {
 		metrics, err := co.externalClient.NamespacedMetrics(namespace).List(metricName, labelMatch)
 		if err != nil {
 			klog.Errorf("unable to fetch metrics %s from apiServer: %v", metricName, err)
+			return nil, err
 		}
-		if metricName == fmt.Sprintf("cost_total_%s", co.TimeUnit) {
+		if strings.HasPrefix(metricName, COST_TOTAL) {
 			CostTotal = metrics.Items[0]
 		} else {
 			podMetricsMap = co.convertPodCostMap(metricName, podMetricsMap, metrics.Items)
@@ -203,10 +217,10 @@ func (co *CostOptions) DescribePodCostDetail(namespace string, labelMatch labels
 		podMetricsList = append(podMetricsList, *value)
 	}
 
-	return podMetricsList
+	return podMetricsList, nil
 }
 
-func (co *CostOptions) buildParams(params map[string]string) (namespace, labelSelector, podLabel string) {
+func (co *CostOptions) buildParams(params map[string]string) (namespace, labelSelector, podLabel string, err error) {
 	for key, value := range params {
 		switch key {
 		case "DimensionType":
@@ -217,12 +231,26 @@ func (co *CostOptions) buildParams(params map[string]string) (namespace, labelSe
 			co.LabelSelector = value
 		case "TimeUnit":
 			co.TimeUnit = value
+		case "StartTime":
+			co.StartTime = value
+		case "EndTime":
+			co.EndTime = value
+		case "Step":
+			co.Step, err = strconv.Atoi(value)
+			if err != nil {
+				return
+			}
 		case "Summary":
 			if value == "true" {
 				co.Summary = true
 			}
 		}
 	}
+
+	if co.Step == 0 {
+		co.Step = 60
+	}
+
 	if co.DimensionType == "Namespace" && co.Dimension != "" {
 		namespace = co.Dimension
 	} else {
@@ -239,9 +267,31 @@ func (co *CostOptions) buildParams(params map[string]string) (namespace, labelSe
 		co.TimeUnit = "hour"
 	}
 
+	if co.TimeUnit == "range" {
+		err = co.parseRangeParams(co.StartTime, co.EndTime, co.Step)
+		if err != nil {
+			return
+		}
+	}
+
 	labelSelector = co.LabelSelector
-	klog.Infof("cost http recieve params: namespace %s, labelSelector %s, podLabel %s", namespace, labelSelector, podLabel)
-	return namespace, labelSelector, podLabel
+	klog.Infof("cost http recieve params: namespace %s, labelSelector %s, podLabel %s, startTime %s, endTime %s, step %d", namespace, labelSelector, podLabel, co.StartTime, co.EndTime, co.Step)
+	return namespace, labelSelector, podLabel, nil
+}
+
+func (co *CostOptions) parseRangeParams(startTime, endTime string, step int) (err error) {
+	RangeParam.StartTime, err = time.Parse("2006-01-02T15:04:05Z", startTime)
+	if err != nil {
+		return err
+	}
+
+	RangeParam.EndTime, err = time.Parse("2006-01-02T15:04:05Z", endTime)
+	if err != nil {
+		return err
+	}
+
+	RangeParam.Step = time.Duration(step) * time.Second
+	return nil
 }
 
 // Combine labelSelector and podLabel
@@ -262,27 +312,43 @@ func (co *CostOptions) buildLabelMatches(label, podLabel string) (labelMatches l
 	return labelMatches, err
 }
 
-func (co *CostOptions) getCostMetrics(params map[string]string) (podMetricsList []PodMetrics) {
-	namespace, labelSelector, podLabel := co.buildParams(params)
-	err := co.getClient()
+func (co *CostOptions) getCostMetrics(params map[string]string) (podMetricsList []PodMetrics, err error) {
+	namespace, labelSelector, podLabel, err := co.buildParams(params)
 	if err != nil {
-		fmt.Errorf("unable to construct  externalclient: %v", err)
+		klog.Errorf("failed parse params: %v", err)
+		return nil, err
+	}
+
+	err = co.getClient()
+	if err != nil {
+		klog.Errorf("unable to construct  externalclient: %v", err)
+		return nil, err
 	}
 
 	labelMatch, err := co.buildLabelMatches(labelSelector, podLabel)
 	if err != nil {
 		klog.Errorf("failed parse labelMatches: %v", err)
+		return nil, err
 	}
 
 	metricList := []string{"cost_cpu_request", "cost_cpu_limit", "cost_memory_request", "cost_memory_limit", "cost_memory_usage", "cost_cpu_usage", "cost_percorepricing"}
-	metricList = append(metricList, fmt.Sprintf("cost_total_%s", co.TimeUnit))
-	metricList = append(metricList, fmt.Sprintf("cost_%s", co.TimeUnit))
-	if co.Summary == true {
-		podMetricsList = co.DescribeCostSummary(namespace, labelMatch, metricList)
+	if co.TimeUnit == "range" {
+		metricList = append(metricList, "cost")
+		metricList = append(metricList, "cost_total")
 	} else {
-		podMetricsList = co.DescribePodCostDetail(namespace, labelMatch, metricList)
+		metricList = append(metricList, fmt.Sprintf("cost_total_%s", co.TimeUnit))
+		metricList = append(metricList, fmt.Sprintf("cost_%s", co.TimeUnit))
 	}
-	return podMetricsList
+
+	if co.Summary == true {
+		podMetricsList, err = co.DescribeCostSummary(namespace, labelMatch, metricList)
+	} else {
+		podMetricsList, err = co.DescribePodCostDetail(namespace, labelMatch, metricList)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return podMetricsList, nil
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
@@ -291,9 +357,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	for k, v := range res {
 		paramsMap[k] = v[0]
 	}
-	var costOptions = CostOptions{}
-	podMetricsList := costOptions.getCostMetrics(paramsMap)
 	w.Header().Set("content-type", "application/json")
+	var costOptions = CostOptions{}
+	podMetricsList, err := costOptions.getCostMetrics(paramsMap)
+	if err != nil {
+		io.WriteString(w, fmt.Sprintf("cost data fetch error. err: %v", err))
+		return
+	}
 	p, _ := json.Marshal(podMetricsList)
 	io.WriteString(w, string(p))
 }
