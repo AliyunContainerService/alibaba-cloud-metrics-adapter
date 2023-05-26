@@ -53,11 +53,11 @@ type PodMetrics struct {
 }
 
 type Metadata struct {
-	Timestamp     v1.Time `json:"timestamp"`
-	TimeUnit      string  `json:"timeUnit"`
-	DimensionType string  `json:"DimensionType"`
-	Dimension     string  `json:"Dimension"`
-	PodName       string  `json:"PodName"`
+	Timestamp     string `json:"timestamp"`
+	TimeUnit      string `json:"timeUnit"`
+	DimensionType string `json:"DimensionType"`
+	Dimension     string `json:"Dimension"`
+	PodName       string `json:"PodName"`
 }
 
 type Request struct {
@@ -113,10 +113,14 @@ func (co *CostOptions) convertPodCostMap(metricsName string, podMetricsMap map[s
 		if podMetricsMap[pod] == nil && pod != "" {
 			podMetricsMap[pod] = &PodMetrics{}
 			podMetricsMap[pod].Metadata.PodName = value.MetricLabels["pod"]
+			if RangeParam.Range {
+				podMetricsMap[pod].Metadata.Timestamp = fmt.Sprintf("%s-%s", RangeParam.StartTime, RangeParam.EndTime)
+			} else {
+				podMetricsMap[pod].Metadata.Timestamp = value.Timestamp.String()
+			}
 			podMetricsMap[pod].Metadata.TimeUnit = co.TimeUnit
 			podMetricsMap[pod].Metadata.DimensionType = co.DimensionType
 			podMetricsMap[pod].Metadata.Dimension = co.Dimension
-			podMetricsMap[pod].Metadata.Timestamp = value.Timestamp
 		}
 		singlePodMetrics := podMetricsMap[pod]
 		switch value.MetricName {
@@ -163,7 +167,11 @@ func (co *CostOptions) convertCostSummaryMap(metricName string, podMetric PodMet
 	case COST, COST_HOUR, COST_DAY, COST_WEEK, COST_MONTH:
 		podMetric.Cost = parseMetricValue(float64(metric.Value.MilliValue()) / 1000)
 		podMetric.CostRatio = parseMetricValue(float64(metric.Value.MilliValue()) / float64(CostTotal.Value.MilliValue()))
-		podMetric.Metadata.Timestamp = metric.Timestamp
+		if RangeParam.Range {
+			podMetric.Metadata.Timestamp = fmt.Sprintf("%s - %s", RangeParam.StartTime, RangeParam.EndTime)
+		} else {
+			podMetric.Metadata.Timestamp = metric.Timestamp.String()
+		}
 		podMetric.Metadata.TimeUnit = co.TimeUnit
 		podMetric.Metadata.DimensionType = co.DimensionType
 		podMetric.Metadata.Dimension = co.Dimension
@@ -291,6 +299,7 @@ func (co *CostOptions) parseRangeParams(startTime, endTime string, step int) (er
 	}
 
 	RangeParam.Step = time.Duration(step) * time.Second
+	RangeParam.Range = true
 	return nil
 }
 

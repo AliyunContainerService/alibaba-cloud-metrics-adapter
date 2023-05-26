@@ -156,6 +156,7 @@ func (cs *COSTMetricSource) getCOSTMetrics(namespace, metricName string, query p
 	}
 
 	klog.Infof("start : %v , end %v, step %v", RangeParam.StartTime, RangeParam.EndTime, RangeParam.Step)
+	klog.Infof("RangeParam.Range: %v", RangeParam.Range)
 	if RangeParam.Range {
 		r := prom.Range{
 			pmodel.TimeFromUnixNano(RangeParam.StartTime.UnixNano()), pmodel.TimeFromUnixNano(RangeParam.EndTime.UnixNano()),
