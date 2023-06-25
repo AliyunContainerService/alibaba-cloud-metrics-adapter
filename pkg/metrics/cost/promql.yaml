@@ -1,0 +1,26 @@
+
+CostPromQL:
+  - metric_name: cost_day_pod
+    promQL: "sum(sum_over_time((sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[168h:1h])) by(pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
+    default_interval: 60
+    agg_opt: total
+    start_time: now() - 86400
+    end_time: now()
+    dimension: pod
+    query_type: range
+  - metric_name: cost_week_namespace
+    promQL: "sum(sum_over_time((sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[168h:1h])) by(pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
+    default_interval: 60
+    agg_opt: total
+    start_time: now() - 7 * 86400
+    end_time: now()
+    dimension: namespace
+    query_type: range
+  - metric_name: cpu_usage_day_pod
+    promQL: "sum(sum_over_time((sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[168h:1h])) by(pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
+    default_interval: 60
+    agg_opt: avg
+    start_time: now() - 86400
+    end_time: now()
+    dimension: pod
+    query_type: range
