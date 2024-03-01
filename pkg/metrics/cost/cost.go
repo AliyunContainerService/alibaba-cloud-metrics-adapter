@@ -40,6 +40,10 @@ const (
 	COST_TOTAL_DAY          = "cost_total_day"
 	COST_TOTAL_WEEK         = "cost_total_week"
 	COST_TOTAL_MONTH        = "cost_total_month"
+	COST_CUSTOM_HOUR        = "cost_custom_hour"
+	COST_CUSTOM_DAY         = "cost_custom_day"
+	COST_CUSTOM_WEEK        = "cost_custom_week"
+	COST_CUSTOM_MONTH       = "cost_custom_month"
 )
 
 type COSTParams struct {
@@ -79,6 +83,10 @@ func (cs *COSTMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 		COST_TOTAL_DAY,
 		COST_TOTAL_WEEK,
 		COST_TOTAL_MONTH,
+		COST_CUSTOM_HOUR,
+		COST_CUSTOM_DAY,
+		COST_CUSTOM_WEEK,
+		COST_CUSTOM_MONTH,
 	}
 	for _, metric := range MetricArray {
 		metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
@@ -144,6 +152,14 @@ func getPrometheusSql(metricName string) (item string) {
 		item = "sum(sum_over_time((sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"}) by (node) * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"})[720h:1h])* 3600)"
 	case COST_PERCOREPRICING:
 		item = "sum(max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity_cpu_cores{job=\"_kube-state-metrics\"} * on(node) group_right kube_pod_container_resource_requests_cpu_cores{job=\"_kube-state-metrics\"}) by (pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) / on(pod) sum(kube_pod_container_resource_requests_cpu_cores) by (pod) * 3600"
+	case COST_CUSTOM_HOUR:
+		item = "max(label_replace(pod_custom_price, \"pod\", \"$1\", \"exported_pod\", \"(.*)\")) by (pod) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
+	case COST_CUSTOM_DAY:
+		item = "sum_over_time((max(label_replace(pod_custom_price, \"pod\", \"$1\", \"exported_pod\", \"(.*)\")) by (pod))[24h:1h]) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
+	case COST_CUSTOM_WEEK:
+		item = "sum_over_time((max(label_replace(pod_custom_price, \"pod\", \"$1\", \"exported_pod\", \"(.*)\")) by (pod))[168h:1h]) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
+	case COST_CUSTOM_MONTH:
+		item = "sum_over_time((max(label_replace(pod_custom_price, \"pod\", \"$1\", \"exported_pod\", \"(.*)\")) by (pod))[720h:1h]) * on(pod) group_right sum(kube_pod_labels{%s}) by (pod) * 3600"
 	}
 	return item
 }
