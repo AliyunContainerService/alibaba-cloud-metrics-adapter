@@ -5,7 +5,6 @@ import (
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/ahas"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/cms"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/cost"
-
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/slb"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/sls"
 	"k8s.io/apimachinery/pkg/labels"
