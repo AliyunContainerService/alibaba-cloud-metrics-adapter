@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/cost"
 	types "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/types"
+	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
+	pmodel "github.com/prometheus/common/model"
 	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -16,6 +17,7 @@ import (
 	externalclient "k8s.io/metrics/pkg/client/external_metrics"
 	"log"
 	"net/http"
+	prom "sigs.k8s.io/prometheus-adapter/pkg/client"
 	"strings"
 	"time"
 )
@@ -55,22 +57,45 @@ func (cm *CostManager) getExternalMetrics(namespace, metricName string, metricSe
 	return metrics
 }
 
-func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.Duration, filter string) (*types.AllocationSet, error) {
+func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.Duration, filter *types.Filter) (*types.AllocationSet, error) {
+	klog.V(4).Infof("ComputeAllocation: start: %v, end: %v, resolution: %v, filter: %v", start, end, resolution, filter)
+
 	window := types.NewWindow(&start, &end)
 	allocSet := types.NewAllocationSet(start, end)
 	podMap := map[types.PodMeta]*types.Pod{}
 
 	// parse from filter
-	namespaces, err := cm.client.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
-	metricSelector, err := labels.Parse("")
+	//if err := cm.buildPodMapV2(window, podMap, "", filter); err != nil {
+	//	return nil, err
+	//}
+
+	metricSelector, err := labels.Parse(filter.GetLabelSelectorStr())
 	if err != nil {
+		return nil, err
 	}
 
-	for _, namespace := range namespaces.Items {
-		// init podMap metadata
-		cm.buildPodMap(window, podMap, namespace.Name, metricSelector)
-		cm.applyMetricToPodMap(namespace.Name, cost.COST_CPU_REQUEST, metricSelector, podMap)
-	}
+	// buildPodMap can use FilteredPodInfo
+	cm.applyMetricToPodMap(window, CPUCoreRequestAverage, metricSelector, podMap)
+	cm.applyMetricToPodMap(window, CPUCoreUsageAverage, metricSelector, podMap)
+	cm.applyMetricToPodMap(window, MemoryRequestAverage, metricSelector, podMap)
+	cm.applyMetricToPodMap(window, MemoryUsageAverage, metricSelector, podMap)
+
+	//for _, namespace := range filter.Namespace {
+	//	// init podMap metadata
+	//	cm.buildPodMap(window, podMap, namespace, metricSelector)
+	//	cm.applyMetricToPodMap(window, namespace, cost.COST_CPU_REQUEST, metricSelector, podMap)
+	//}
+
+	//namespaces, err := cm.client.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
+	//metricSelector, err := labels.Parse("")
+	//if err != nil {
+	//}
+	//
+	//for _, namespace := range namespaces.Items {
+	//	// init podMap metadata
+	//	cm.buildPodMap(window, podMap, namespace.Name, metricSelector)
+	//	cm.applyMetricToPodMap(namespace.Name, cost.COST_CPU_REQUEST, metricSelector, podMap)
+	//}
 
 	for _, pod := range podMap {
 		allocSet.Set(pod.Allocations)
@@ -79,25 +104,44 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.D
 	return allocSet, nil
 }
 
-func (cm *CostManager) applyMetricToPodMap(namespace, metricName string, metricSelector labels.Selector, podMap map[types.PodMeta]*types.Pod) {
-	valueList := cm.getExternalMetrics(namespace, metricName, metricSelector)
+func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName string, metricSelector labels.Selector, podMap map[types.PodMeta]*types.Pod) {
+	valueList := cm.getExternalMetrics("", metricName, metricSelector)
 	for _, value := range valueList.Items {
 		pod, ok := value.MetricLabels["pod"]
 		if !ok {
 			return
 		}
 
+		namespace, ok := value.MetricLabels["namespace"]
+		if !ok {
+			return
+		}
+
 		key := types.PodMeta{Namespace: namespace, Pod: pod}
-		if _, ok := podMap[key]; ok {
-			switch metricName {
-			case cost.COST_CPU_REQUEST:
-				podMap[key].Allocations.CPUCoreRequestAverage = float64(value.Value.MilliValue()) / 1000 / 1024
+		if _, ok := podMap[key]; !ok {
+			podMap[key] = &types.Pod{
+				Key:         key,
+				Allocations: &types.Allocation{Name: fmt.Sprintf("%s/%s", namespace, pod)},
+				Window:      window,
 			}
+		}
+
+		switch metricName {
+		case CPUCoreRequestAverage:
+			podMap[key].Allocations.CPUCoreRequestAverage = float64(value.Value.MilliValue()) / 1000
+		case CPUCoreUsageAverage:
+			podMap[key].Allocations.CPUCoreUsageAverage = float64(value.Value.MilliValue()) / 1000
+		case MemoryRequestAverage:
+			podMap[key].Allocations.RAMBytesRequestAverage = float64(value.Value.MilliValue()) / 1000
+		case MemoryUsageAverage:
+			podMap[key].Allocations.RAMBytesUsageAverage = float64(value.Value.MilliValue()) / 1000
 		}
 	}
 }
 
-func (cm *CostManager) GetRangeAllocation(window types.Window, resolution, step time.Duration, aggregate []string, filter string, format string, accumulateBy AccumulateOption) (*types.AllocationSetRange, error) {
+func (cm *CostManager) GetRangeAllocation(window types.Window, resolution, step time.Duration, aggregate []string, filter *types.Filter, format string, accumulateBy AccumulateOption) (*types.AllocationSetRange, error) {
+	klog.Infof("get range allocation params: window: %s, resolution: %s, step: %s, aggregate: %s, filter: %s, format: %s, accumulateBy: %s", window, resolution, step, aggregate, filter, format, accumulateBy)
+
 	// Validate window is legal
 	if window.IsOpen() || window.IsNegative() {
 		return nil, fmt.Errorf("illegal window: %s", window)
@@ -167,16 +211,43 @@ func (cm *CostManager) buildPodMap(window types.Window, podMap map[types.PodMeta
 
 }
 
+func (cm *CostManager) buildPodMapV2(window types.Window, podMap map[types.PodMeta]*types.Pod, namespace string, labelSelector labels.Selector, filter *types.Filter) error {
+	client, err := prometheusProvider.GlobalConfig.MakePromClient()
+	if err != nil {
+		return fmt.Errorf("failed to create prometheus client, because of %v", err)
+	}
+
+	queryFilteredPodInfo := prom.Selector(fmt.Sprintf(QueryFilteredPodInfo, filter.GetKubePodLabelStr(), filter.GetKubePodInfoStr()))
+	klog.V(4).Infof("external query，query filtered pod info: %v", queryFilteredPodInfo)
+
+	queryResult, err := client.Query(context.TODO(), pmodel.Now(), queryFilteredPodInfo)
+	if err != nil {
+		return fmt.Errorf("unable to query from prometheus: %v", err)
+	}
+	klog.Infof("external query result: %v", queryResult)
+	return nil
+}
+
 func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	res := r.URL.Query()
 	paramsMap := make(map[string]string)
 	for k, v := range res {
 		paramsMap[k] = v[0]
 	}
+	klog.Infof("compute allocation params: %v", paramsMap)
 
 	window, err := types.ParseWindowWithOffset(paramsMap["window"], time.Duration(0))
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", err), http.StatusBadRequest)
+	}
+
+	filter := &types.Filter{}
+	if filterStr, ok := paramsMap["filter"]; ok {
+		filter, err = types.ParseFilter(filterStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'filter' parameter: %s", err), http.StatusBadRequest)
+			return
+		}
 	}
 
 	// todo: parse other params
@@ -185,7 +256,7 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	aggregate := make([]string, 0)
 
 	cm := NewCostManager()
-	asr, err := cm.GetRangeAllocation(window, resolution, step, aggregate, "", "", AccumulateOptionNone)
+	asr, err := cm.GetRangeAllocation(window, resolution, step, aggregate, filter, "", AccumulateOptionNone)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "bad request") {
 			WriteError(w, BadRequest(err.Error()))

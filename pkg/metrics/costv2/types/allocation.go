@@ -5,21 +5,21 @@ import (
 )
 
 type Allocation struct {
-	Name                   string                `json:"name"`
-	Properties             *AllocationProperties `json:"properties,omitempty"`
-	Window                 Window                `json:"window"`
-	Start                  time.Time             `json:"start"`
-	End                    time.Time             `json:"end"`
-	CPUCoreHours           float64               `json:"cpuCoreHours"`
-	CPUCoreRequestAverage  float64               `json:"cpuCoreRequestAverage"`
-	CPUCoreUsageAverage    float64               `json:"cpuCoreUsageAverage"`
-	GPUHours               float64               `json:"gpuHours"`
-	RAMByteHours           float64               `json:"ramByteHours"`
-	RAMBytesRequestAverage float64               `json:"ramByteRequestAverage"`
-	RAMBytesUsageAverage   float64               `json:"ramByteUsageAverage"`
-	Cost                   float64               `json:"cost"`
-	CostRatio              float64               `json:"costRatio"`
-	CustomCost             float64               `json:"customCost"`
+	Name                  string                `json:"name"`
+	Properties            *AllocationProperties `json:"properties,omitempty"`
+	Window                Window                `json:"window"`
+	Start                 time.Time             `json:"start"`
+	End                   time.Time             `json:"end"`
+	CPUCoreHours          float64               `json:"cpuCoreHours"`
+	CPUCoreRequestAverage float64               `json:"cpuCoreRequestAverage"`
+	CPUCoreUsageAverage   float64               `json:"cpuCoreUsageAverage"`
+	//GPUHours               float64               `json:"gpuHours"`
+	RAMByteHours           float64 `json:"ramByteHours"`
+	RAMBytesRequestAverage float64 `json:"ramByteRequestAverage"`
+	RAMBytesUsageAverage   float64 `json:"ramByteUsageAverage"`
+	Cost                   float64 `json:"cost"`
+	CostRatio              float64 `json:"costRatio"`
+	CustomCost             float64 `json:"customCost"`
 }
 
 type AllocationProperties struct {
