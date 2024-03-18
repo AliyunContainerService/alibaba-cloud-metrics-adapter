@@ -2,6 +2,7 @@ package costv2
 
 import (
 	"fmt"
+	util "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/util"
 	"math"
 	"regexp"
 	"strconv"
@@ -10,35 +11,6 @@ import (
 )
 
 const (
-	// SecsPerMin expresses the amount of seconds in a minute
-	SecsPerMin = 60.0
-
-	// SecsPerHour expresses the amount of seconds in a minute
-	SecsPerHour = 3600.0
-
-	// SecsPerDay expressed the amount of seconds in a day
-	SecsPerDay = 86400.0
-
-	// MinsPerHour expresses the amount of minutes in an hour
-	MinsPerHour = 60.0
-
-	// MinsPerDay expresses the amount of minutes in a day
-	MinsPerDay = 1440.0
-
-	// HoursPerDay expresses the amount of hours in a day
-	HoursPerDay = 24.0
-
-	// HoursPerMonth expresses the amount of hours in a month
-	HoursPerMonth = 730.0
-
-	// DaysPerMonth expresses the amount of days in a month
-	DaysPerMonth = 30.42
-
-	// Day expresses 24 hours
-	Day = time.Hour * 24.0
-
-	Week = Day * 7.0
-
 	WindowLayout = "20060102150405"
 )
 
@@ -235,7 +207,7 @@ func parseWindow(window string, now time.Time) (Window, error) {
 			dur = 24 * time.Hour
 		}
 		if match[2] == "w" {
-			dur = Week
+			dur = util.Week
 		}
 
 		num, _ := strconv.ParseInt(match[1], 10, 64)
@@ -248,8 +220,8 @@ func parseWindow(window string, now time.Time) (Window, error) {
 		// "entirety" is defined as midnight to midnight, UTC. given this definition, we round forward the calculated
 		// start and end times to the nearest day to align with midnight boundaries
 		if match[2] == "d" || match[2] == "w" {
-			end = end.Truncate(Day).Add(Day)
-			start = start.Truncate(Day).Add(Day)
+			end = end.Truncate(util.Day).Add(util.Day)
+			start = start.Truncate(util.Day).Add(util.Day)
 		}
 
 		return NewWindow(&start, &end), nil
@@ -268,7 +240,7 @@ func parseWindow(window string, now time.Time) (Window, error) {
 			offUnit = 24 * time.Hour
 		}
 		if match[4] == "w" {
-			offUnit = 24 * Week
+			offUnit = 24 * util.Week
 		}
 
 		offNum, _ := strconv.ParseInt(match[3], 10, 64)
@@ -283,7 +255,7 @@ func parseWindow(window string, now time.Time) (Window, error) {
 			durUnit = 24 * time.Hour
 		}
 		if match[2] == "w" {
-			durUnit = Week
+			durUnit = util.Week
 		}
 
 		durNum, _ := strconv.ParseInt(match[1], 10, 64)
@@ -312,31 +284,6 @@ func parseWindow(window string, now time.Time) (Window, error) {
 	}
 
 	return Window{nil, nil}, fmt.Errorf("illegal window: %s", window)
-}
-
-// DurationString converts a duration to a Prometheus-compatible string in
-// terms of days, hours, minutes, or seconds.
-func DurationString(duration time.Duration) string {
-	durSecs := int64(duration.Seconds())
-
-	durStr := ""
-	if durSecs > 0 {
-		if durSecs%SecsPerDay == 0 {
-			// convert to days
-			durStr = fmt.Sprintf("%dd", durSecs/SecsPerDay)
-		} else if durSecs%SecsPerHour == 0 {
-			// convert to hours
-			durStr = fmt.Sprintf("%dh", durSecs/SecsPerHour)
-		} else if durSecs%SecsPerMin == 0 {
-			// convert to mins
-			durStr = fmt.Sprintf("%dm", durSecs/SecsPerMin)
-		} else if durSecs > 0 {
-			// default to secs, as long as duration is positive
-			durStr = fmt.Sprintf("%ds", durSecs)
-		}
-	}
-
-	return durStr
 }
 
 // ParseWindowWithOffset parses the given window string within the context of

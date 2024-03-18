@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	types "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/types"
+	util "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/util"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
 	pmodel "github.com/prometheus/common/model"
 	"io"
@@ -271,10 +272,18 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	step := window.Duration()
+	if stepStr, ok := paramsMap["step"]; ok {
+		step, err = util.ParseDuration(stepStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'step' parameter: %s", err), http.StatusBadRequest)
+			return
+		}
+	}
+
 	// todo: parse other params
-	resolution := time.Duration(0)
-	step := time.Duration(0)
 	aggregate := make([]string, 0)
+	resolution := time.Duration(0)
 
 	cm := NewCostManager()
 	asr, err := cm.GetRangeAllocation(window, resolution, step, aggregate, filter, "", AccumulateOptionNone)

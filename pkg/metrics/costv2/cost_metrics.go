@@ -3,7 +3,7 @@ package costv2
 import (
 	"context"
 	"fmt"
-	types "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/types"
+	util "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/util"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
 	"github.com/prometheus/common/model"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
@@ -75,7 +75,7 @@ func (cs *COSTV2MetricSource) getCOSTMetricsAtTime(namespace, metricName string,
 		klog.Errorf("Failed to create prometheus client,because of %v", err)
 		return nil, err
 	}
-	klog.V(4).Infof("external query :%+v", query)
+	klog.V(4).Infof("external query at time %v: %+v", query, model.TimeFromUnixNano(end.UnixNano()))
 	queryResult, err := client.Query(context.TODO(), model.TimeFromUnixNano(end.UnixNano()), query)
 	if err != nil {
 		klog.Errorf("unable to fetch metrics from prometheus: %v", err)
@@ -159,7 +159,7 @@ func buildExternalQuery(promQL string, requirements labels.Requirements) (extern
 		fmt.Println("Error parsing end time:", err)
 		return
 	}
-	durStr := fmt.Sprintf("%s:%s", types.DurationString(end.Sub(start)), "1h")
+	durStr := fmt.Sprintf("%s:%s", util.DurationString(end.Sub(start)), "1h")
 
 	externalQuery = prom.Selector(fmt.Sprintf(promQL, durStr, kubePodLabelStr, kubePodInfoStr))
 	return externalQuery, requirementMap
