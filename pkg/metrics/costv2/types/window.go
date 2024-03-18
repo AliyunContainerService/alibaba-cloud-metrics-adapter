@@ -38,6 +38,8 @@ const (
 	Day = time.Hour * 24.0
 
 	Week = Day * 7.0
+
+	WindowLayout = "20060102150405"
 )
 
 var (
@@ -110,6 +112,14 @@ func (w Window) Equal(that Window) bool {
 
 	// either both starts are nil, or they match; likewise for the ends
 	return true
+}
+
+func (w Window) GetLabelSelectorStr() string {
+	start := *w.Start()
+	end := *w.End()
+	startStr := start.Format(WindowLayout)
+	endStr := end.Format(WindowLayout)
+	return fmt.Sprintf("window_start=%s,window_end=%s,window_layout=%s", startStr, endStr, WindowLayout)
 }
 
 // parseWindow generalizes the parsing of window strings, relative to a given
@@ -302,6 +312,31 @@ func parseWindow(window string, now time.Time) (Window, error) {
 	}
 
 	return Window{nil, nil}, fmt.Errorf("illegal window: %s", window)
+}
+
+// DurationString converts a duration to a Prometheus-compatible string in
+// terms of days, hours, minutes, or seconds.
+func DurationString(duration time.Duration) string {
+	durSecs := int64(duration.Seconds())
+
+	durStr := ""
+	if durSecs > 0 {
+		if durSecs%SecsPerDay == 0 {
+			// convert to days
+			durStr = fmt.Sprintf("%dd", durSecs/SecsPerDay)
+		} else if durSecs%SecsPerHour == 0 {
+			// convert to hours
+			durStr = fmt.Sprintf("%dh", durSecs/SecsPerHour)
+		} else if durSecs%SecsPerMin == 0 {
+			// convert to mins
+			durStr = fmt.Sprintf("%dm", durSecs/SecsPerMin)
+		} else if durSecs > 0 {
+			// default to secs, as long as duration is positive
+			durStr = fmt.Sprintf("%ds", durSecs)
+		}
+	}
+
+	return durStr
 }
 
 // ParseWindowWithOffset parses the given window string within the context of

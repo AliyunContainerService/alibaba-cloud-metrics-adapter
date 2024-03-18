@@ -3,6 +3,7 @@ package costv2
 import (
 	"context"
 	"fmt"
+	types "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/types"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
 	"github.com/prometheus/common/model"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
@@ -14,6 +15,7 @@ import (
 	p "sigs.k8s.io/custom-metrics-apiserver/pkg/provider"
 	prom "sigs.k8s.io/prometheus-adapter/pkg/client"
 	"strings"
+	"time"
 )
 
 const (
@@ -54,22 +56,27 @@ func (cs *COSTV2MetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo
 // according to the incoming label, get the metric..
 func (cs *COSTV2MetricSource) GetExternalMetric(info p.ExternalMetricInfo, namespace string, requirements labels.Requirements) (values []external_metrics.ExternalMetricValue, err error) {
 	promQL := getPrometheusSql(info.Metric)
-	query := buildExternalQuery(promQL, requirements)
-	values, err = cs.getCOSTMetrics(namespace, info.Metric, query)
+	query, requirementMap := buildExternalQuery(promQL, requirements)
+	end, err := time.Parse(requirementMap["window_layout"], requirementMap["window_end"])
+	if err != nil {
+		fmt.Println("Error parsing end time:", err)
+		return
+	}
+	values, err = cs.getCOSTMetricsAtTime(namespace, info.Metric, query, end)
 	if err != nil {
 		klog.Warningf("Failed to GetExternalMetric %s,because of %v", info.Metric, err)
 	}
 	return values, err
 }
 
-func (cs *COSTV2MetricSource) getCOSTMetrics(namespace, metricName string, query prom.Selector) ([]external_metrics.ExternalMetricValue, error) {
+func (cs *COSTV2MetricSource) getCOSTMetricsAtTime(namespace, metricName string, query prom.Selector, end time.Time) ([]external_metrics.ExternalMetricValue, error) {
 	client, err := prometheusProvider.GlobalConfig.MakePromClient()
 	if err != nil {
 		klog.Errorf("Failed to create prometheus client,because of %v", err)
 		return nil, err
 	}
 	klog.V(4).Infof("external query :%+v", query)
-	queryResult, err := client.Query(context.TODO(), model.Now(), query)
+	queryResult, err := client.Query(context.TODO(), model.TimeFromUnixNano(end.UnixNano()), query)
 	if err != nil {
 		klog.Errorf("unable to fetch metrics from prometheus: %v", err)
 		return nil, apierr.NewInternalError(fmt.Errorf("unable to fetch metrics"))
@@ -120,9 +127,10 @@ func convertLabels(metric model.Metric) map[string]string {
 	return labels
 }
 
-func buildExternalQuery(promQL string, requirements labels.Requirements) (externalQuery prom.Selector) {
-	requirementMap := make(map[string]string)
+func buildExternalQuery(promQL string, requirements labels.Requirements) (externalQuery prom.Selector, requirementMap map[string]string) {
+	requirementMap = make(map[string]string)
 	kubePodLabelStr := ""
+
 	for _, value := range requirements {
 		if strings.HasPrefix(value.Key(), "label_") {
 			kubePodLabelStr = fmt.Sprintf(`%s=~"%s"`, value.Key(), value.Values().List()[0])
@@ -136,10 +144,25 @@ func buildExternalQuery(promQL string, requirements labels.Requirements) (extern
 		}
 	}
 	klog.Infof("requirementMap: %v", requirementMap)
+
 	kubePodInfoStr := fmt.Sprintf(`namespace=~"%s",created_by_kind=~"%s",created_by_name=~"%s",pod=~"%s"`,
 		requirementMap["namespace"], requirementMap["created_by_kind"], requirementMap["created_by_name"], requirementMap["pod"])
-	externalQuery = prom.Selector(fmt.Sprintf(promQL, "1h:30m", kubePodLabelStr, kubePodInfoStr))
-	return externalQuery
+
+	layout := requirementMap["window_layout"]
+	start, err := time.Parse(layout, requirementMap["window_start"])
+	if err != nil {
+		fmt.Println("Error parsing start time:", err)
+		return
+	}
+	end, err := time.Parse(layout, requirementMap["window_end"])
+	if err != nil {
+		fmt.Println("Error parsing end time:", err)
+		return
+	}
+	durStr := fmt.Sprintf("%s:%s", types.DurationString(end.Sub(start)), "1h")
+
+	externalQuery = prom.Selector(fmt.Sprintf(promQL, durStr, kubePodLabelStr, kubePodInfoStr))
+	return externalQuery, requirementMap
 }
 
 func getPrometheusSql(metricName string) (item string) {

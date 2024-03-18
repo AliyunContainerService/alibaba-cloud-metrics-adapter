@@ -69,7 +69,12 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.D
 	//	return nil, err
 	//}
 
-	metricSelector, err := labels.Parse(filter.GetLabelSelectorStr())
+	selectorStr := []string{
+		window.GetLabelSelectorStr(),
+		filter.GetLabelSelectorStr(),
+	}
+
+	metricSelector, err := labels.Parse(strings.Join(selectorStr, ","))
 	if err != nil {
 		return nil, err
 	}
