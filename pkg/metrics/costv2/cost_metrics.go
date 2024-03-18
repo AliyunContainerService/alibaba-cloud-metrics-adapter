@@ -138,7 +138,7 @@ func buildExternalQuery(promQL string, requirements labels.Requirements) (extern
 	klog.Infof("requirementMap: %v", requirementMap)
 	kubePodInfoStr := fmt.Sprintf(`namespace=~"%s",created_by_kind=~"%s",created_by_name=~"%s",pod=~"%s"`,
 		requirementMap["namespace"], requirementMap["created_by_kind"], requirementMap["created_by_name"], requirementMap["pod"])
-	externalQuery = prom.Selector(fmt.Sprintf(promQL, "1h", kubePodLabelStr, kubePodInfoStr))
+	externalQuery = prom.Selector(fmt.Sprintf(promQL, "1h:30m", kubePodLabelStr, kubePodInfoStr))
 	return externalQuery
 }
 
