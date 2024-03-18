@@ -128,6 +128,9 @@ func buildExternalQuery(promQL string, requirements labels.Requirements) (extern
 			kubePodLabelStr = fmt.Sprintf(`%s=~"%s"`, value.Key(), value.Values().List()[0])
 		} else {
 			requirementMap[value.Key()] = value.Values().List()[0]
+			if value.Values().List()[0] == "" {
+				requirementMap[value.Key()] = ".*"
+			}
 		}
 	}
 	kubePodInfoStr := fmt.Sprintf(`namespace=~"%s",created_by_kind=~"%s",created_by_name=~"%s",pod=~"%s"`,

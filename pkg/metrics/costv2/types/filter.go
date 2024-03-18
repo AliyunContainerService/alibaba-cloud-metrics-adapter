@@ -2,6 +2,7 @@ package costv2
 
 import (
 	"fmt"
+	"k8s.io/klog/v2"
 	"strings"
 )
 
@@ -44,28 +45,28 @@ func (f *Filter) getNamespaceStr() string {
 	if f.Namespace != nil {
 		return strings.Join(f.Namespace, "|")
 	}
-	return ".*"
+	return ""
 }
 
 func (f *Filter) getControllerNameStr() string {
 	if f.ControllerName != nil {
 		return strings.Join(f.ControllerName, "|")
 	}
-	return ".*"
+	return ""
 }
 
 func (f *Filter) getControllerKindStr() string {
 	if f.ControllerKind != nil {
 		return strings.Join(f.ControllerKind, "|")
 	}
-	return ".*"
+	return ""
 }
 
 func (f *Filter) getPodStr() string {
 	if f.Pod != nil {
 		return strings.Join(f.Pod, "|")
 	}
-	return ".*"
+	return ""
 }
 
 // parseFilterParts Split the filter string
@@ -85,6 +86,7 @@ func ParseFilter(filterStr string) (*Filter, error) {
 	filter := &Filter{}
 
 	filterParts := parseFilterParts(filterStr)
+	klog.Infof("filterParts: %v", filterParts)
 
 	for _, part := range filterParts {
 		if part == "" {
