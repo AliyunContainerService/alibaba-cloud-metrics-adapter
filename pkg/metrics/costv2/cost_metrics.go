@@ -127,12 +127,15 @@ func buildExternalQuery(promQL string, requirements labels.Requirements) (extern
 		if strings.HasPrefix(value.Key(), "label_") {
 			kubePodLabelStr = fmt.Sprintf(`%s=~"%s"`, value.Key(), value.Values().List()[0])
 		} else {
-			requirementMap[value.Key()] = value.Values().List()[0]
+			klog.Infof("requirement key: %s, value: %s", value.Key(), value.Values().List()[0])
 			if value.Values().List()[0] == "" {
 				requirementMap[value.Key()] = ".*"
+			} else {
+				requirementMap[value.Key()] = value.Values().List()[0]
 			}
 		}
 	}
+	klog.Infof("requirementMap: %v", requirementMap)
 	kubePodInfoStr := fmt.Sprintf(`namespace=~"%s",created_by_kind=~"%s",created_by_name=~"%s",pod=~"%s"`,
 		requirementMap["namespace"], requirementMap["created_by_kind"], requirementMap["created_by_name"], requirementMap["pod"])
 	externalQuery = prom.Selector(fmt.Sprintf(promQL, "1h", kubePodLabelStr, kubePodInfoStr))

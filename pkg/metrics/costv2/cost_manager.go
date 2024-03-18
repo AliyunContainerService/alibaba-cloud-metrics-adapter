@@ -105,7 +105,7 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.D
 }
 
 func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName string, metricSelector labels.Selector, podMap map[types.PodMeta]*types.Pod) {
-	valueList := cm.getExternalMetrics("", metricName, metricSelector)
+	valueList := cm.getExternalMetrics("*", metricName, metricSelector)
 	for _, value := range valueList.Items {
 		pod, ok := value.MetricLabels["pod"]
 		if !ok {
