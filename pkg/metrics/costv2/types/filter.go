@@ -75,7 +75,7 @@ func parseFilterParts(filterStr string) []string {
 
 	// for each prefix, the prefix in the filter string is replaced with a special symbol("\x1f") plus prefix for segmentation.
 	for _, prefix := range prefixes {
-		filterStr = strings.Replace(filterStr, "+"+prefix, "\x1f"+prefix, -1)
+		filterStr = strings.Replace(filterStr, prefix, "\x1f"+prefix, -1)
 	}
 
 	return strings.Split(filterStr, "\x1f")
@@ -94,13 +94,16 @@ func ParseFilter(filterStr string) (*Filter, error) {
 		}
 
 		// handles the contents of fields inside ""
+		part = strings.Trim(part, " ")
 		kv := strings.SplitN(part, `:"`, 2)
 		if len(kv) != 2 {
 			return nil, fmt.Errorf("invalid filter format: %s", part)
 		}
+		klog.Infof("kv: %s,    %s", kv[0], kv[1])
 
 		key := strings.Trim(kv[0], `"`)
 		value := strings.Trim(kv[1], `"`)
+		klog.Infof("key: %s,    value: %s", key, value)
 
 		switch {
 		case strings.HasPrefix(key, "namespace"):
