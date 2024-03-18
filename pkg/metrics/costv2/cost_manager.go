@@ -173,8 +173,7 @@ func (cm *CostManager) GetRangeAllocation(window types.Window, resolution, step 
 	// Query for AllocationSets in increments of the given step duration,
 	// appending each to the response.
 	stepStart := *window.Start()
-	//stepEnd := stepStart.Add(step)
-	stepEnd := *window.End()
+	stepEnd := stepStart.Add(step)
 	for window.End().After(stepStart) {
 		allocSet, err := cm.ComputeAllocation(stepStart, stepEnd, resolution, filter)
 		if err != nil {
@@ -274,6 +273,7 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 
 	step := window.Duration()
 	if stepStr, ok := paramsMap["step"]; ok {
+		klog.Infof("compute allocation params: step: %s", stepStr)
 		step, err = util.ParseDuration(stepStr)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Invalid 'step' parameter: %s", err), http.StatusBadRequest)
