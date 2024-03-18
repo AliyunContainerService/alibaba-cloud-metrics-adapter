@@ -100,6 +100,7 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.D
 	for _, pod := range podMap {
 		allocSet.Set(pod.Allocations)
 	}
+	allocSet.Window = window
 
 	return allocSet, nil
 }
@@ -118,11 +119,24 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 		}
 
 		key := types.PodMeta{Namespace: namespace, Pod: pod}
+
+		// init podMap metadata
 		if _, ok := podMap[key]; !ok {
 			podMap[key] = &types.Pod{
-				Key:         key,
-				Allocations: &types.Allocation{Name: fmt.Sprintf("%s/%s", namespace, pod)},
-				Window:      window,
+				Key: key,
+				Allocations: &types.Allocation{
+					Name:   fmt.Sprintf("%s/%s", namespace, pod),
+					Window: window,
+					Start:  *window.Start(),
+					End:    *window.End(),
+					Properties: &types.AllocationProperties{
+						Controller:     value.MetricLabels["created_by_name"],
+						ControllerKind: value.MetricLabels["created_by_kind"],
+						Pod:            pod,
+						Namespace:      namespace,
+					},
+				},
+				Window: window,
 			}
 		}
 
