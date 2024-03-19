@@ -256,7 +256,7 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	klog.Infof("compute allocation params: %v", paramsMap)
 
 	klog.Infof("compute allocation params: window: %s", paramsMap["window"])
-	window, err := types.ParseWindowWithOffset(paramsMap["window"], time.Duration(0))
+	window, err := types.ParseWindow(paramsMap["window"])
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", err), http.StatusBadRequest)
 	}

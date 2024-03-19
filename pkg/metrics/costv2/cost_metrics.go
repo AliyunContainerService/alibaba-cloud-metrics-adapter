@@ -75,13 +75,19 @@ func (cs *COSTV2MetricSource) getCOSTMetricsAtTime(namespace, metricName string,
 		klog.Errorf("Failed to create prometheus client,because of %v", err)
 		return nil, err
 	}
-	klog.V(4).Infof("external query at time %v: %+v", query, model.TimeFromUnixNano(end.UnixNano()))
-	queryResult, err := client.Query(context.TODO(), model.TimeFromUnixNano(end.UnixNano()), query)
+	endUTC := end.UTC()
+	klog.Infof("end: %v, end utc time: %v", end, endUTC)
+
+	endTime := model.TimeFromUnixNano(end.Add(-8 * time.Hour).UnixNano())
+	klog.V(4).Infof("external query at time %v: %+v", query, endTime)
+
+	queryResult, err := client.Query(context.TODO(), endTime, query)
 	if err != nil {
 		klog.Errorf("unable to fetch metrics from prometheus: %v", err)
 		return nil, apierr.NewInternalError(fmt.Errorf("unable to fetch metrics"))
 	}
 	klog.V(4).Infof("queryResult for %s: %v", metricName, queryResult)
+
 	return cs.convertVector(metricName, queryResult)
 }
 

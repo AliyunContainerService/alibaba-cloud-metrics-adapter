@@ -294,6 +294,11 @@ func ParseWindowWithOffset(window string, offset time.Duration) (Window, error) 
 	return parseWindow(window, now)
 }
 
+func ParseWindow(window string) (Window, error) {
+	now := time.Now()
+	return parseWindow(window, now)
+}
+
 // NewWindow creates and returns a new Window instance from the given times
 func NewWindow(start, end *time.Time) Window {
 	return Window{
