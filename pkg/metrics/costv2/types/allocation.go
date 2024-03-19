@@ -20,6 +20,8 @@ type Allocation struct {
 	Cost                   float64 `json:"cost"`
 	CostRatio              float64 `json:"costRatio"`
 	CustomCost             float64 `json:"customCost"`
+	CostCPURequest         float64
+	CostRAMRequest         float64
 }
 
 type AllocationProperties struct {

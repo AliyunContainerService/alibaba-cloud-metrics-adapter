@@ -88,6 +88,11 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.D
 	cm.applyMetricToPodMap(window, CostCPURequest, metricSelector, podMap)
 	cm.applyMetricToPodMap(window, CostMemoryRequest, metricSelector, podMap)
 
+	weightCPU, weightRAM := getCostWeights()
+	for _, pod := range podMap {
+		pod.Allocations.Cost = pod.Allocations.CostCPURequest*weightCPU + pod.Allocations.CostRAMRequest*weightRAM
+	}
+
 	//for _, namespace := range filter.Namespace {
 	//	// init podMap metadata
 	//	cm.buildPodMap(window, podMap, namespace, metricSelector)
@@ -158,11 +163,29 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 		case MemoryUsageAverage:
 			podMap[key].Allocations.RAMBytesUsageAverage = float64(value.Value.MilliValue()) / 1000
 		case CostCPURequest:
-			podMap[key].Allocations.Cost = float64(value.Value.MilliValue()) / 1000
+			podMap[key].Allocations.CostCPURequest = float64(value.Value.MilliValue()) / 1000
 		case CostMemoryRequest:
-			podMap[key].Allocations.CustomCost = float64(value.Value.MilliValue()) / 1000
+			podMap[key].Allocations.CostRAMRequest = float64(value.Value.MilliValue()) / 1000
 		}
 	}
+}
+
+type CostWeights struct {
+	CPU    float64 `json:"cpu,string"`
+	Memory float64 `json:"memory,string"`
+	GPU    float64 `json:"gpu,string,omitempty"`
+}
+
+func getCostWeights() (cpu, memory float64) {
+	costWeightsStr := prometheusProvider.GlobalConfig.CostWeights
+	costWeights := CostWeights{}
+	err := json.Unmarshal([]byte(costWeightsStr), &costWeights)
+	if err != nil {
+		fmt.Println("Error parsing cost weights:", err)
+		return 1, 0
+	}
+	klog.Infof("cost weights: cpu: %f, memory: %f, gpu: %f", costWeights.CPU, costWeights.Memory, costWeights.GPU)
+	return costWeights.CPU, costWeights.Memory
 }
 
 func (cm *CostManager) GetRangeAllocation(window types.Window, resolution, step time.Duration, aggregate []string, filter *types.Filter, format string, accumulateBy AccumulateOption) (*types.AllocationSetRange, error) {
