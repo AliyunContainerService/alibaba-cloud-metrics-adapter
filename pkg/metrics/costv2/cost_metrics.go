@@ -24,12 +24,18 @@ const (
 	CPUCoreUsageAverage   = "cpu_core_usage_average"
 	MemoryRequestAverage  = "memory_request_average"
 	MemoryUsageAverage    = "memory_usage_average"
+	CostCPURequest        = "cost_cpu_request"
+	CostMemoryRequest     = "cost_memory_request"
+	CostTotal             = "cost_total"
 
 	QueryFilteredPodInfo       = `max(kube_pod_labels{%s}) by (pod,namespace) * on(pod, namespace) group_right kube_pod_info{%s}`
 	QueryCPUCoreRequestAverage = `sum(avg_over_time(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="cpu"}[%s])) by (namespace, pod)`
 	QueryCPUCoreUsageAverage   = `sum(avg_over_time(rate(container_cpu_usage_seconds_total[1m])[%s])) by(namespace, pod)`
 	QueryMemoryRequestAverage  = `sum(avg_over_time(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="memory"}[%s])) by (namespace, pod)`
 	QueryMemoryUsageAverage    = `sum(avg_over_time(container_memory_working_set_bytes[%s])) by(namespace, pod)`
+	QueryCostCPURequest        = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="cpu"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="cpu"})[%s])) by (namespace, pod) * 3600`
+	QueryCostMemoryRequest     = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="memory"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="memory"})[%s])) by (namespace, pod) * 3600`
+	QueryCostTotal             = `sum(sum_over_time((max(node_current_price) by (node))[24h:1h])) * 3600`
 )
 
 type COSTV2MetricSource struct {
@@ -44,6 +50,9 @@ func (cs *COSTV2MetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo
 		CPUCoreUsageAverage,
 		MemoryRequestAverage,
 		MemoryUsageAverage,
+		CostCPURequest,
+		CostMemoryRequest,
+		CostTotal,
 	}
 	for _, metric := range MetricArray {
 		metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
@@ -55,9 +64,9 @@ func (cs *COSTV2MetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo
 
 // according to the incoming label, get the metric..
 func (cs *COSTV2MetricSource) GetExternalMetric(info p.ExternalMetricInfo, namespace string, requirements labels.Requirements) (values []external_metrics.ExternalMetricValue, err error) {
-	promQL := getPrometheusSql(info.Metric)
-	query, requirementMap := buildExternalQuery(promQL, requirements)
-	end, err := time.Parse(requirementMap["window_layout"], requirementMap["window_end"])
+	requirementMap := parseRequirements(requirements)
+	query := buildExternalQuery(info.Metric, requirementMap)
+	end, err := time.Parse(requirementMap["window_layout"][0], requirementMap["window_end"][0])
 	if err != nil {
 		fmt.Println("Error parsing end time:", err)
 		return
@@ -75,11 +84,10 @@ func (cs *COSTV2MetricSource) getCOSTMetricsAtTime(namespace, metricName string,
 		klog.Errorf("Failed to create prometheus client,because of %v", err)
 		return nil, err
 	}
-	endUTC := end.UTC()
-	klog.Infof("end: %v, end utc time: %v", end, endUTC)
 
-	endTime := model.TimeFromUnixNano(end.Add(-8 * time.Hour).UnixNano())
-	klog.V(4).Infof("external query at time %v: %+v", query, endTime)
+	endUTC := util.GetUTCTime(end)
+	endTime := model.TimeFromUnixNano(endUTC.UnixNano())
+	klog.V(4).Infof("external query at UTC time %v: %+v", endUTC, query)
 
 	queryResult, err := client.Query(context.TODO(), endTime, query)
 	if err != nil {
@@ -133,49 +141,83 @@ func convertLabels(metric model.Metric) map[string]string {
 	return labels
 }
 
-func buildExternalQuery(promQL string, requirements labels.Requirements) (externalQuery prom.Selector, requirementMap map[string]string) {
-	requirementMap = make(map[string]string)
-	kubePodLabelStr := ""
+func parseRequirements(requirements labels.Requirements) (requirementMap map[string][]string) {
+	requirementMap = make(map[string][]string)
 
 	for _, value := range requirements {
-		if strings.HasPrefix(value.Key(), "label_") {
-			kubePodLabelStr = fmt.Sprintf(`%s=~"%s"`, value.Key(), value.Values().List()[0])
-		} else {
-			klog.Infof("requirement key: %s, value: %s", value.Key(), value.Values().List()[0])
-			if value.Values().List()[0] == "" {
-				requirementMap[value.Key()] = ".*"
-			} else {
-				requirementMap[value.Key()] = value.Values().List()[0]
-			}
+		klog.Infof("requirement key: %s, value: %s", value.Key(), value.Values().List()[0])
+		requirementMap[value.Key()] = value.Values().List()
+	}
+
+	klog.Infof("requirementMap: %v", requirementMap)
+	return requirementMap
+}
+
+func parsePromLabel(item []string) string {
+	// todo use array for multi ns, pod etc.
+	if item[0] == "" {
+		return ".*"
+	}
+	return item[0]
+}
+
+func buildExternalQuery(metricName string, requirementMap map[string][]string) (externalQuery prom.Selector) {
+	// build str for kube_pod_labels
+	kubePodLabelStr := ""
+	for key, value := range requirementMap {
+		if strings.HasPrefix(key, "label_") {
+			kubePodLabelStr = fmt.Sprintf(`%s=~"%s"`, key, value[0])
 		}
 	}
-	klog.Infof("requirementMap: %v", requirementMap)
 
+	// build str for kube_pod_info
 	kubePodInfoStr := fmt.Sprintf(`namespace=~"%s",created_by_kind=~"%s",created_by_name=~"%s",pod=~"%s"`,
-		requirementMap["namespace"], requirementMap["created_by_kind"], requirementMap["created_by_name"], requirementMap["pod"])
+		parsePromLabel(requirementMap["namespace"]), parsePromLabel(requirementMap["created_by_kind"]), parsePromLabel(requirementMap["created_by_name"]), parsePromLabel(requirementMap["pod"]))
 
-	layout := requirementMap["window_layout"]
-	start, err := time.Parse(layout, requirementMap["window_start"])
+	// build str for prom duration
+	layout := requirementMap["window_layout"][0]
+	start, err := time.Parse(layout, requirementMap["window_start"][0])
 	if err != nil {
 		fmt.Println("Error parsing start time:", err)
 		return
 	}
-	end, err := time.Parse(layout, requirementMap["window_end"])
+	end, err := time.Parse(layout, requirementMap["window_end"][0])
 	if err != nil {
 		fmt.Println("Error parsing end time:", err)
 		return
 	}
 	durStr := fmt.Sprintf("%s:%s", util.DurationString(end.Sub(start)), "1h")
 
-	externalQuery = prom.Selector(fmt.Sprintf(promQL, durStr, kubePodLabelStr, kubePodInfoStr))
-	return externalQuery, requirementMap
+	switch metricName {
+	case CPUCoreRequestAverage:
+		item := fmt.Sprintf("%s * %s", QueryCPUCoreRequestAverage, QueryFilteredPodInfo)
+		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
+	case CPUCoreUsageAverage:
+		item := fmt.Sprintf("%s * %s", QueryCPUCoreUsageAverage, QueryFilteredPodInfo)
+		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
+	case MemoryRequestAverage:
+		item := fmt.Sprintf("%s * %s", QueryMemoryRequestAverage, QueryFilteredPodInfo)
+		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
+	case MemoryUsageAverage:
+		item := fmt.Sprintf("%s * %s", QueryMemoryUsageAverage, QueryFilteredPodInfo)
+		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
+	case CostCPURequest:
+		item := fmt.Sprintf("%s * %s", QueryCostCPURequest, QueryFilteredPodInfo)
+		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
+	case CostMemoryRequest:
+		item := fmt.Sprintf("%s * %s", QueryCostMemoryRequest, QueryFilteredPodInfo)
+		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
+	case CostTotal:
+		item := fmt.Sprintf("%s", QueryCostTotal)
+		externalQuery = prom.Selector(fmt.Sprintf(item, durStr))
+	}
+
+	return externalQuery
 }
 
 func getPrometheusSql(metricName string) (item string) {
 	switch metricName {
 	case CPUCoreRequestAverage:
-		//item = `avg(avg_over_time(kube_pod_container_resource_requests{resource="cpu", unit="core", container!="", container!="POD", node!="", %s}[%s])) by (container, pod, namespace, node, %s)`
-		//item = `sum(kube_pod_container_resource_requests_cpu_cores{job="_kube-state-metrics"}) by(pod) * on(pod) group_right sum(kube_pod_labels{%s}) by(pod)`
 		item = fmt.Sprintf("%s * %s", QueryCPUCoreRequestAverage, QueryFilteredPodInfo)
 	case CPUCoreUsageAverage:
 		item = fmt.Sprintf("%s * %s", QueryCPUCoreUsageAverage, QueryFilteredPodInfo)
@@ -183,6 +225,12 @@ func getPrometheusSql(metricName string) (item string) {
 		item = fmt.Sprintf("%s * %s", QueryMemoryRequestAverage, QueryFilteredPodInfo)
 	case MemoryUsageAverage:
 		item = fmt.Sprintf("%s * %s", QueryMemoryUsageAverage, QueryFilteredPodInfo)
+	case CostCPURequest:
+		item = fmt.Sprintf("%s * %s", QueryCostCPURequest, QueryFilteredPodInfo)
+	case CostMemoryRequest:
+		item = fmt.Sprintf("%s * %s", QueryCostMemoryRequest, QueryFilteredPodInfo)
+	case CostTotal:
+		item = fmt.Sprintf("%s", QueryCostTotal)
 	}
 	return item
 }

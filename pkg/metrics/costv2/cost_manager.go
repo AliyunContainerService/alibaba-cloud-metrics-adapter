@@ -85,6 +85,8 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.D
 	cm.applyMetricToPodMap(window, CPUCoreUsageAverage, metricSelector, podMap)
 	cm.applyMetricToPodMap(window, MemoryRequestAverage, metricSelector, podMap)
 	cm.applyMetricToPodMap(window, MemoryUsageAverage, metricSelector, podMap)
+	cm.applyMetricToPodMap(window, CostCPURequest, metricSelector, podMap)
+	cm.applyMetricToPodMap(window, CostMemoryRequest, metricSelector, podMap)
 
 	//for _, namespace := range filter.Namespace {
 	//	// init podMap metadata
@@ -155,6 +157,10 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 			podMap[key].Allocations.RAMBytesRequestAverage = float64(value.Value.MilliValue()) / 1000
 		case MemoryUsageAverage:
 			podMap[key].Allocations.RAMBytesUsageAverage = float64(value.Value.MilliValue()) / 1000
+		case CostCPURequest:
+			podMap[key].Allocations.Cost = float64(value.Value.MilliValue()) / 1000
+		case CostMemoryRequest:
+			podMap[key].Allocations.CustomCost = float64(value.Value.MilliValue()) / 1000
 		}
 	}
 }
@@ -164,7 +170,7 @@ func (cm *CostManager) GetRangeAllocation(window types.Window, resolution, step 
 
 	// Validate window is legal
 	if window.IsOpen() || window.IsNegative() {
-		return nil, fmt.Errorf("illegal window: %s", window)
+		return nil, fmt.Errorf("bad request - illegal window: %s", window)
 	}
 
 	// Begin with empty response

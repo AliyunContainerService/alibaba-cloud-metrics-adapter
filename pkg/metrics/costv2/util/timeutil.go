@@ -63,6 +63,10 @@ func DurationString(duration time.Duration) string {
 	return durStr
 }
 
+func GetUTCTime(t time.Time) time.Time {
+	return t.Add(-8 * time.Hour)
+}
+
 // ParseDuration parses a duration string.
 // A duration string is a possibly signed sequence of
 // decimal numbers, each with optional fraction and a unit suffix,
