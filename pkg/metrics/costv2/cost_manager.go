@@ -125,6 +125,9 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.D
 
 func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName string, metricSelector labels.Selector, podMap map[types.PodMeta]*types.Pod) {
 	valueList := cm.getExternalMetrics("*", metricName, metricSelector)
+	if valueList == nil || valueList.Items == nil {
+		return
+	}
 	for _, value := range valueList.Items {
 		pod, ok := value.MetricLabels["pod"]
 		if !ok {
@@ -217,6 +220,9 @@ func (cm *CostManager) GetRangeAllocation(window types.Window, resolution, step 
 
 		stepStart = stepEnd
 		stepEnd = stepStart.Add(step)
+		if stepEnd.After(*window.End()) {
+			stepStart = *window.End()
+		}
 	}
 
 	// Aggregate
