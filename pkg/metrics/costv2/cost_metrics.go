@@ -35,7 +35,7 @@ const (
 	QueryMemoryUsageAverage    = `sum(avg_over_time(container_memory_working_set_bytes[%s])) by(namespace, pod)`
 	QueryCostCPURequest        = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="cpu"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="cpu"})[%s])) by (namespace, pod) * 3600`
 	QueryCostMemoryRequest     = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="memory"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="memory"})[%s])) by (namespace, pod) * 3600`
-	QueryCostTotal             = `sum(sum_over_time((max(node_current_price) by (node))[24h:1h])) * 3600`
+	QueryCostTotal             = `sum(sum_over_time((max(node_current_price) by (node))[%s])) * 3600`
 )
 
 type COSTV2MetricSource struct {
@@ -87,7 +87,7 @@ func (cs *COSTV2MetricSource) getCOSTMetricsAtTime(namespace, metricName string,
 
 	endUTC := util.GetUTCTime(end)
 	endTime := model.TimeFromUnixNano(endUTC.UnixNano())
-	klog.V(4).Infof("external query at UTC time %v: %+v", endUTC, query)
+	klog.V(4).Infof("external query at UTC time %v: %v", endUTC, query)
 
 	queryResult, err := client.Query(context.TODO(), endTime, query)
 	if err != nil {
