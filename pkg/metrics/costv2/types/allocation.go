@@ -33,8 +33,8 @@ type AllocationProperties struct {
 }
 
 type AllocationSet struct {
-	Allocations map[string]*Allocation `json:"-"`
-	Window      Window
+	Allocations map[string]*Allocation `json:"allocations"`
+	Window      Window                 `json:"window"`
 }
 
 // NewAllocationSet instantiates a new AllocationSet
