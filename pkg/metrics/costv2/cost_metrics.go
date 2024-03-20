@@ -161,6 +161,23 @@ func parsePromLabel(item []string) string {
 	return item[0]
 }
 
+func parseKubePodInfoStr(requirementMap map[string][]string) string {
+	strList := make([]string, 0)
+	if list, ok := requirementMap["namespace"]; ok {
+		strList = append(strList, fmt.Sprintf(`namespace=~"%s"`, strings.Join(list, "|")))
+	}
+	if list, ok := requirementMap["pod"]; ok {
+		strList = append(strList, fmt.Sprintf(`pod=~"%s"`, strings.Join(list, "|")))
+	}
+	if list, ok := requirementMap["created_by_kind"]; ok {
+		strList = append(strList, fmt.Sprintf(`created_by_kind=~"%s"`, strings.Join(list, "|")))
+	}
+	if list, ok := requirementMap["created_by_name"]; ok {
+		strList = append(strList, fmt.Sprintf(`created_by_name=~"%s"`, strings.Join(list, "|")))
+	}
+	return strings.Join(strList, ",")
+}
+
 func buildExternalQuery(metricName string, requirementMap map[string][]string) (externalQuery prom.Selector) {
 	// build str for kube_pod_labels
 	kubePodLabelStr := ""
@@ -171,8 +188,22 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 	}
 
 	// build str for kube_pod_info
-	kubePodInfoStr := fmt.Sprintf(`namespace=~"%s",created_by_kind=~"%s",created_by_name=~"%s",pod=~"%s"`,
-		parsePromLabel(requirementMap["namespace"]), parsePromLabel(requirementMap["created_by_kind"]), parsePromLabel(requirementMap["created_by_name"]), parsePromLabel(requirementMap["pod"]))
+	//kubePodInfoStr := fmt.Sprintf(`namespace=~"%s",created_by_kind=~"%s",created_by_name=~"%s",pod=~"%s"`,
+	//	parsePromLabel(requirementMap["namespace"]), parsePromLabel(requirementMap["created_by_kind"]), parsePromLabel(requirementMap["created_by_name"]), parsePromLabel(requirementMap["pod"]))
+	kubePodInfoStrList := make([]string, 0)
+	if list, ok := requirementMap["namespace"]; ok {
+		kubePodInfoStrList = append(kubePodInfoStrList, fmt.Sprintf(`namespace=~"%s"`, strings.Join(list, "|")))
+	}
+	if list, ok := requirementMap["pod"]; ok {
+		kubePodInfoStrList = append(kubePodInfoStrList, fmt.Sprintf(`pod=~"%s"`, strings.Join(list, "|")))
+	}
+	if list, ok := requirementMap["created_by_kind"]; ok {
+		kubePodInfoStrList = append(kubePodInfoStrList, fmt.Sprintf(`created_by_kind=~"%s"`, strings.Join(list, "|")))
+	}
+	if list, ok := requirementMap["created_by_name"]; ok {
+		kubePodInfoStrList = append(kubePodInfoStrList, fmt.Sprintf(`created_by_name=~"%s"`, strings.Join(list, "|")))
+	}
+	kubePodInfoStr := strings.Join(kubePodInfoStrList, ",")
 
 	// build str for prom duration
 	layout := requirementMap["window_layout"][0]

@@ -2,6 +2,8 @@ package costv2
 
 import (
 	"fmt"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/klog/v2"
 	"strings"
 )
@@ -14,13 +16,55 @@ type Filter struct {
 	Label          map[string][]string
 }
 
+//func (f *Filter) GetLabelSelectorStr() string {
+//	if f.GetKubePodLabelStr() == "" {
+//		return fmt.Sprintf(`namespace=%s,created_by_kind=%s,created_by_name=%s,pod=%s`,
+//			f.getNamespaceStr(), f.getControllerKindStr(), f.getControllerNameStr(), f.getPodStr())
+//	}
+//	return fmt.Sprintf(`namespace=%s,created_by_kind=%s,created_by_name=%s,pod=%s,%s`,
+//		f.getNamespaceStr(), f.getControllerKindStr(), f.getControllerNameStr(), f.getPodStr(), f.GetKubePodLabelStr())
+//}
+
 func (f *Filter) GetLabelSelectorStr() string {
-	if f.GetKubePodLabelStr() == "" {
-		return fmt.Sprintf(`namespace=%s,created_by_kind=%s,created_by_name=%s,pod=%s`,
-			f.getNamespaceStr(), f.getControllerKindStr(), f.getControllerNameStr(), f.getPodStr())
+	var requirements []labels.Requirement
+
+	addInRequirement := func(key string, values []string) error {
+		if len(values) == 0 {
+			return nil
+		}
+		r, err := labels.NewRequirement(key, selection.In, values)
+		if err != nil {
+			return err
+		}
+		requirements = append(requirements, *r)
+		return nil
 	}
-	return fmt.Sprintf(`namespace=%s,created_by_kind=%s,created_by_name=%s,pod=%s,%s`,
-		f.getNamespaceStr(), f.getControllerKindStr(), f.getControllerNameStr(), f.getPodStr(), f.GetKubePodLabelStr())
+
+	for key, values := range f.Label {
+		if err := addInRequirement("label_"+key, values); err != nil {
+			return ""
+		}
+	}
+
+	if err := addInRequirement("namespace", f.Namespace); err != nil {
+		return ""
+	}
+
+	if err := addInRequirement("created_by_name", f.ControllerName); err != nil {
+		return ""
+	}
+
+	if err := addInRequirement("created_by_kind", f.ControllerKind); err != nil {
+		return ""
+	}
+
+	if err := addInRequirement("pod", f.Pod); err != nil {
+		return ""
+	}
+
+	selector := labels.NewSelector().Add(requirements...).String()
+
+	return selector
 }
 
 func (f *Filter) GetKubePodInfoStr() string {
@@ -81,6 +125,16 @@ func parseFilterParts(filterStr string) []string {
 	return strings.Split(filterStr, "\x1f")
 }
 
+// parse str "a","b" to []string{a,b}
+func parseValueList(values string) []string {
+	valueList := strings.Split(values, ",")
+	for i, value := range valueList {
+		valueList[i] = strings.Trim(strings.Trim(value, " "), `"`)
+		klog.Infof("valueList[%d]: %s", i, valueList[i])
+	}
+	return valueList
+}
+
 // ParseFilter Parses the given string to *Filter
 func ParseFilter(filterStr string) (*Filter, error) {
 	filter := &Filter{}
@@ -102,23 +156,23 @@ func ParseFilter(filterStr string) (*Filter, error) {
 		klog.Infof("kv: %s,    %s", kv[0], kv[1])
 
 		key := strings.Trim(kv[0], `"`)
-		value := strings.Trim(kv[1], `"`)
-		klog.Infof("key: %s,    value: %s", key, value)
+		values := strings.Trim(kv[1], `+`)
+		klog.Infof("key: %s,    value: %s", key, values)
 
 		switch {
 		case strings.HasPrefix(key, "namespace"):
-			filter.Namespace = strings.Split(value, ",")
+			filter.Namespace = parseValueList(values)
 		case strings.HasPrefix(key, "controllerName"):
-			filter.ControllerName = strings.Split(value, ",")
+			filter.ControllerName = parseValueList(values)
 		case strings.HasPrefix(key, "controllerKind"):
-			filter.ControllerKind = strings.Split(value, ",")
+			filter.ControllerKind = parseValueList(values)
 		case strings.HasPrefix(key, "pod"):
-			filter.Pod = strings.Split(value, ",")
+			filter.Pod = parseValueList(values)
 		case strings.HasPrefix(key, "label["):
 			filter.Label = make(map[string][]string)
 			labelKey := strings.TrimPrefix(key, "label[")
 			labelKey = strings.TrimSuffix(labelKey, "]")
-			filter.Label[labelKey] = []string{value}
+			filter.Label[labelKey] = []string{strings.Trim(values, `"`)}
 		default:
 			return nil, fmt.Errorf("unsupported filter key: %s", key)
 		}

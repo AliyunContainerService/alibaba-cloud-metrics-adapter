@@ -7,7 +7,6 @@ import (
 	types "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/types"
 	util "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/util"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
-	pmodel "github.com/prometheus/common/model"
 	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -18,7 +17,6 @@ import (
 	externalclient "k8s.io/metrics/pkg/client/external_metrics"
 	"log"
 	"net/http"
-	prom "sigs.k8s.io/prometheus-adapter/pkg/client"
 	"strings"
 	"time"
 )
@@ -265,22 +263,22 @@ func (cm *CostManager) buildPodMap(window types.Window, podMap map[types.PodMeta
 
 }
 
-func (cm *CostManager) buildPodMapV2(window types.Window, podMap map[types.PodMeta]*types.Pod, namespace string, labelSelector labels.Selector, filter *types.Filter) error {
-	client, err := prometheusProvider.GlobalConfig.MakePromClient()
-	if err != nil {
-		return fmt.Errorf("failed to create prometheus client, because of %v", err)
-	}
-
-	queryFilteredPodInfo := prom.Selector(fmt.Sprintf(QueryFilteredPodInfo, filter.GetKubePodLabelStr(), filter.GetKubePodInfoStr()))
-	klog.V(4).Infof("external query，query filtered pod info: %v", queryFilteredPodInfo)
-
-	queryResult, err := client.Query(context.TODO(), pmodel.Now(), queryFilteredPodInfo)
-	if err != nil {
-		return fmt.Errorf("unable to query from prometheus: %v", err)
-	}
-	klog.Infof("external query result: %v", queryResult)
-	return nil
-}
+//func (cm *CostManager) buildPodMapV2(window types.Window, podMap map[types.PodMeta]*types.Pod, namespace string, labelSelector labels.Selector, filter *types.Filter) error {
+//	client, err := prometheusProvider.GlobalConfig.MakePromClient()
+//	if err != nil {
+//		return fmt.Errorf("failed to create prometheus client, because of %v", err)
+//	}
+//
+//	queryFilteredPodInfo := prom.Selector(fmt.Sprintf(QueryFilteredPodInfo, filter.GetKubePodLabelStr(), filter.GetKubePodInfoStr()))
+//	klog.V(4).Infof("external query，query filtered pod info: %v", queryFilteredPodInfo)
+//
+//	queryResult, err := client.Query(context.TODO(), pmodel.Now(), queryFilteredPodInfo)
+//	if err != nil {
+//		return fmt.Errorf("unable to query from prometheus: %v", err)
+//	}
+//	klog.Infof("external query result: %v", queryResult)
+//	return nil
+//}
 
 func (cm *CostManager) getSingleValueMetric(metricName string, metricSelector labels.Selector) float64 {
 	valueList := cm.getExternalMetrics("*", metricName, metricSelector)
