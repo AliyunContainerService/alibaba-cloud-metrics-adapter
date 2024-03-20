@@ -89,8 +89,14 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.D
 	cm.applyMetricToPodMap(window, CostMemoryRequest, metricSelector, podMap)
 
 	weightCPU, weightRAM := getCostWeights()
+	totalCost := cm.getSingleValueMetric(CostTotal, metricSelector)
+
 	for _, pod := range podMap {
 		pod.Allocations.Cost = pod.Allocations.CostCPURequest*weightCPU + pod.Allocations.CostRAMRequest*weightRAM
+
+		if totalCost != 0 {
+			pod.Allocations.CostRatio = pod.Allocations.Cost / totalCost
+		}
 	}
 
 	//for _, namespace := range filter.Namespace {
@@ -113,6 +119,7 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.D
 	for _, pod := range podMap {
 		allocSet.Set(pod.Allocations)
 	}
+	klog.Infof("ComputeAllocation: window: %v", allocSet)
 	allocSet.Window = window
 
 	return allocSet, nil
@@ -138,10 +145,9 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 			podMap[key] = &types.Pod{
 				Key: key,
 				Allocations: &types.Allocation{
-					Name:   fmt.Sprintf("%s/%s", namespace, pod),
-					Window: window,
-					Start:  *window.Start(),
-					End:    *window.End(),
+					Name:  fmt.Sprintf("%s/%s", namespace, pod),
+					Start: *window.Start(),
+					End:   *window.End(),
 					Properties: &types.AllocationProperties{
 						Controller:     value.MetricLabels["created_by_name"],
 						ControllerKind: value.MetricLabels["created_by_kind"],
@@ -274,6 +280,14 @@ func (cm *CostManager) buildPodMapV2(window types.Window, podMap map[types.PodMe
 	}
 	klog.Infof("external query result: %v", queryResult)
 	return nil
+}
+
+func (cm *CostManager) getSingleValueMetric(metricName string, metricSelector labels.Selector) float64 {
+	valueList := cm.getExternalMetrics("*", metricName, metricSelector)
+	if len(valueList.Items) == 0 {
+		return 0
+	}
+	return float64(valueList.Items[0].Value.MilliValue())
 }
 
 func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {

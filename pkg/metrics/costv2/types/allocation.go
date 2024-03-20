@@ -5,14 +5,14 @@ import (
 )
 
 type Allocation struct {
-	Name                  string                `json:"name"`
-	Properties            *AllocationProperties `json:"properties,omitempty"`
-	Window                Window                `json:"window"`
-	Start                 time.Time             `json:"start"`
-	End                   time.Time             `json:"end"`
-	CPUCoreHours          float64               `json:"cpuCoreHours"`
-	CPUCoreRequestAverage float64               `json:"cpuCoreRequestAverage"`
-	CPUCoreUsageAverage   float64               `json:"cpuCoreUsageAverage"`
+	Name       string                `json:"name"`
+	Properties *AllocationProperties `json:"properties,omitempty"`
+	//Window               *Window                `json:"window"`
+	Start                 time.Time `json:"start"`
+	End                   time.Time `json:"end"`
+	CPUCoreHours          float64   `json:"cpuCoreHours"`
+	CPUCoreRequestAverage float64   `json:"cpuCoreRequestAverage"`
+	CPUCoreUsageAverage   float64   `json:"cpuCoreUsageAverage"`
 	//GPUHours               float64               `json:"gpuHours"`
 	RAMByteHours           float64 `json:"ramByteHours"`
 	RAMBytesRequestAverage float64 `json:"ramByteRequestAverage"`
@@ -20,8 +20,8 @@ type Allocation struct {
 	Cost                   float64 `json:"cost"`
 	CostRatio              float64 `json:"costRatio"`
 	CustomCost             float64 `json:"customCost"`
-	CostCPURequest         float64
-	CostRAMRequest         float64
+	CostCPURequest         float64 `json:"-"`
+	CostRAMRequest         float64 `json:"-"`
 }
 
 type AllocationProperties struct {
@@ -33,7 +33,7 @@ type AllocationProperties struct {
 }
 
 type AllocationSet struct {
-	Allocations map[string]*Allocation
+	Allocations map[string]*Allocation `json:"-"`
 	Window      Window
 }
 
@@ -74,7 +74,7 @@ func (as *AllocationSet) AggregateBy(aggregateBy []string) error {
 }
 
 type AllocationSetRange struct {
-	Allocations []*AllocationSet
+	Allocations []*AllocationSet `json:"data"`
 }
 
 // NewAllocationSetRange instantiates a new range composed of the given

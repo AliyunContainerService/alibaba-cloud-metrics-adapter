@@ -1,6 +1,8 @@
 package costv2
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	util "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/util"
 	"math"
@@ -84,6 +86,58 @@ func (w Window) Equal(that Window) bool {
 
 	// either both starts are nil, or they match; likewise for the ends
 	return true
+}
+
+func (w Window) MarshalJSON() ([]byte, error) {
+	buffer := bytes.NewBufferString("{")
+	if w.start != nil {
+		buffer.WriteString(fmt.Sprintf("\"start\":\"%s\",", w.start.Format(time.RFC3339)))
+	} else {
+		buffer.WriteString(fmt.Sprintf("\"start\":\"%s\",", "null"))
+	}
+	if w.end != nil {
+		buffer.WriteString(fmt.Sprintf("\"end\":\"%s\"", w.end.Format(time.RFC3339)))
+	} else {
+		buffer.WriteString(fmt.Sprintf("\"end\":\"%s\"", "null"))
+	}
+	buffer.WriteString("}")
+	return buffer.Bytes(), nil
+}
+
+func (w *Window) UnmarshalJSON(bs []byte) error {
+	// Due to the behavior of our custom MarshalJSON, we unmarshal as strings
+	// and then manually handle the weird quoted "null" case.
+	type PubWindow struct {
+		Start string `json:"start"`
+		End   string `json:"end"`
+	}
+	var pw PubWindow
+	err := json.Unmarshal(bs, &pw)
+	if err != nil {
+		return fmt.Errorf("half unmarshal: %w", err)
+	}
+
+	var start *time.Time
+	var end *time.Time
+
+	if pw.Start != "null" {
+		t, err := time.Parse(time.RFC3339, pw.Start)
+		if err != nil {
+			return fmt.Errorf("parsing start as RFC3339: %w", err)
+		}
+		start = &t
+	}
+	if pw.End != "null" {
+		t, err := time.Parse(time.RFC3339, pw.End)
+		if err != nil {
+			return fmt.Errorf("parsing end as RFC3339: %w", err)
+		}
+		end = &t
+	}
+
+	w.start = start
+	w.end = end
+	return nil
 }
 
 func (w Window) GetLabelSelectorStr() string {
