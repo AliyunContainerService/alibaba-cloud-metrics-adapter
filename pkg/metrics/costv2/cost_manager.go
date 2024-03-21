@@ -1,14 +1,12 @@
 package costv2
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	types "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/types"
 	util "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/util"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
 	"io"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -64,7 +62,7 @@ func (cm *CostManager) getExternalMetrics(namespace, metricName string, metricSe
 }
 
 func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, resolution time.Duration, filter *types.Filter, costType types.CostType) (*types.AllocationSet, error) {
-	klog.V(4).Infof("ComputeAllocation: start: %v, end: %v, resolution: %v, filter: %v", start, end, resolution, filter)
+	klog.V(4).Infof("compute allocation params: apiType: %v, start: %v, end: %v, resolution: %v, filter: %v, costTpe: %v", apiType, start, end, resolution, filter, costType)
 
 	window := types.NewWindow(&start, &end)
 	allocSet := types.NewAllocationSet()
@@ -98,6 +96,7 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 	case types.AllocationPretaxGrossAmount:
 		totalBilling = cm.getSingleValueMetric(BillingPretaxGrossAmountTotal, metricSelector)
 	}
+	klog.Infof("compute allocation for %v API. totalCost: %v, totalBilling: %v", apiType, totalCost, totalBilling)
 
 	for _, pod := range podMap {
 		pod.Allocations.Cost = pod.Allocations.CostCPURequest*weightCPU + pod.Allocations.CostRAMRequest*weightRAM
@@ -191,7 +190,7 @@ func getCostWeights() (cpu, memory float64) {
 }
 
 func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, resolution, step time.Duration, aggregate []string, filter *types.Filter, format string, accumulateBy AccumulateOption, costType types.CostType) (*types.AllocationSetRange, error) {
-	klog.Infof("get range allocation params: window: %s, resolution: %s, step: %s, aggregate: %s, filter: %s, format: %s, accumulateBy: %s", window, resolution, step, aggregate, filter, format, accumulateBy)
+	klog.Infof("get range allocation params: apiType: %s, window: %s, resolution: %s, step: %s, aggregate: %s, filter: %s, format: %s, accumulateBy: %s, costType: %s", apiType, window, resolution, step, aggregate, filter, format, accumulateBy, costType)
 
 	// Validate window is legal
 	if window.IsOpen() || window.IsNegative() {
@@ -242,45 +241,6 @@ func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, 
 //	return nil, nil
 //}
 
-func (cm *CostManager) buildPodMap(window types.Window, podMap map[types.PodMeta]*types.Pod, namespace string, labelSelector labels.Selector) {
-	pods, err := cm.client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		klog.Errorf("unable to fetch pods from apiServer: %v", err)
-	}
-	klog.Infof("buildPodMap pods: %v", pods.Items)
-	for _, pod := range pods.Items {
-		podMeta := types.PodMeta{
-			Namespace: pod.Namespace,
-			Pod:       pod.Name,
-		}
-		podMap[podMeta] = &types.Pod{
-			Node:        pod.Spec.NodeName,
-			Allocations: &types.Allocation{Name: fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)},
-			Key:         podMeta,
-			Window:      window,
-		}
-	}
-	klog.Infof("buildPodMap podMap: %v", podMap)
-
-}
-
-//func (cm *CostManager) buildPodMapV2(window types.Window, podMap map[types.PodMeta]*types.Pod, namespace string, labelSelector labels.Selector, filter *types.Filter) error {
-//	client, err := prometheusProvider.GlobalConfig.MakePromClient()
-//	if err != nil {
-//		return fmt.Errorf("failed to create prometheus client, because of %v", err)
-//	}
-//
-//	queryFilteredPodInfo := prom.Selector(fmt.Sprintf(QueryFilteredPodInfo, filter.GetKubePodLabelStr(), filter.GetKubePodInfoStr()))
-//	klog.V(4).Infof("external query，query filtered pod info: %v", queryFilteredPodInfo)
-//
-//	queryResult, err := client.Query(context.TODO(), pmodel.Now(), queryFilteredPodInfo)
-//	if err != nil {
-//		return fmt.Errorf("unable to query from prometheus: %v", err)
-//	}
-//	klog.Infof("external query result: %v", queryResult)
-//	return nil
-//}
-
 func (cm *CostManager) getSingleValueMetric(metricName string, metricSelector labels.Selector) float64 {
 	valueList := cm.getExternalMetrics("*", metricName, metricSelector)
 	if len(valueList.Items) == 0 {
@@ -297,7 +257,6 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	klog.Infof("compute allocation params: %v", paramsMap)
 
-	klog.Infof("compute allocation params: window: %s", paramsMap["window"])
 	window, err := types.ParseWindow(paramsMap["window"])
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", err), http.StatusBadRequest)
@@ -308,7 +267,6 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 
 	filter := &types.Filter{}
 	if filterStr, ok := paramsMap["filter"]; ok {
-		klog.Infof("compute allocation params: filter: %s", filterStr)
 		filter, err = types.ParseFilter(filterStr)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Invalid 'filter' parameter: %s", err), http.StatusBadRequest)
@@ -318,7 +276,6 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 
 	step := window.Duration()
 	if stepStr, ok := paramsMap["step"]; ok {
-		klog.Infof("compute allocation params: step: %s", stepStr)
 		step, err = util.ParseDuration(stepStr)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Invalid 'step' parameter: %s", err), http.StatusBadRequest)
@@ -358,9 +315,8 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 	for k, v := range res {
 		paramsMap[k] = v[0]
 	}
-	klog.Infof("compute allocation params: %v", paramsMap)
+	klog.Infof("compute estimated cost params: %v", paramsMap)
 
-	klog.Infof("compute allocation params: window: %s", paramsMap["window"])
 	window, err := types.ParseWindow(paramsMap["window"])
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", err), http.StatusBadRequest)
@@ -371,7 +327,6 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 
 	filter := &types.Filter{}
 	if filterStr, ok := paramsMap["filter"]; ok {
-		klog.Infof("compute allocation params: filter: %s", filterStr)
 		filter, err = types.ParseFilter(filterStr)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Invalid 'filter' parameter: %s", err), http.StatusBadRequest)
@@ -381,7 +336,6 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 
 	step := window.Duration()
 	if stepStr, ok := paramsMap["step"]; ok {
-		klog.Infof("compute allocation params: step: %s", stepStr)
 		step, err = util.ParseDuration(stepStr)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Invalid 'step' parameter: %s", err), http.StatusBadRequest)
