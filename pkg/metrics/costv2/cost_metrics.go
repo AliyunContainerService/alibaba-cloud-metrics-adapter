@@ -256,10 +256,10 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 		item := fmt.Sprintf("%s * %s", QueryCostCustom, QueryFilteredPodInfo)
 		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
 	case BillingPretaxAmountTotal:
-		item := fmt.Sprintf("%s", QueryCostTotal)
+		item := fmt.Sprintf("%s", QueryBillingPretaxAmountTotal)
 		externalQuery = prom.Selector(fmt.Sprintf(item, durStr))
 	case BillingPretaxGrossAmountTotal:
-		item := fmt.Sprintf("%s", QueryCostTotal)
+		item := fmt.Sprintf("%s", QueryBillingPretaxGrossAmountTotal)
 		externalQuery = prom.Selector(fmt.Sprintf(item, durStr))
 	}
 
