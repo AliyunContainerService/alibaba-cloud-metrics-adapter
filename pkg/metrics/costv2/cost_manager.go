@@ -21,6 +21,13 @@ import (
 	"time"
 )
 
+type APIType string
+
+const (
+	TypeCost       APIType = "cost"
+	TypeAllocation APIType = "allocation"
+)
+
 type CostManager struct {
 	externalClient externalclient.ExternalMetricsClient
 	client         kubernetes.Interface
@@ -56,17 +63,12 @@ func (cm *CostManager) getExternalMetrics(namespace, metricName string, metricSe
 	return metrics
 }
 
-func (cm *CostManager) ComputeAllocation(costType types.CostType, start, end time.Time, resolution time.Duration, filter *types.Filter) (*types.AllocationSet, error) {
+func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, resolution time.Duration, filter *types.Filter, costType types.CostType) (*types.AllocationSet, error) {
 	klog.V(4).Infof("ComputeAllocation: start: %v, end: %v, resolution: %v, filter: %v", start, end, resolution, filter)
 
 	window := types.NewWindow(&start, &end)
-	allocSet := types.NewAllocationSet(costType, start, end)
+	allocSet := types.NewAllocationSet()
 	podMap := map[types.PodMeta]*types.Pod{}
-
-	// parse from filter
-	//if err := cm.buildPodMapV2(window, podMap, "", filter); err != nil {
-	//	return nil, err
-	//}
 
 	selectorStr := []string{
 		window.GetLabelSelectorStr(),
@@ -78,7 +80,6 @@ func (cm *CostManager) ComputeAllocation(costType types.CostType, start, end tim
 		return nil, err
 	}
 
-	// buildPodMap can use FilteredPodInfo
 	cm.applyMetricToPodMap(window, CPUCoreRequestAverage, metricSelector, podMap)
 	cm.applyMetricToPodMap(window, CPUCoreUsageAverage, metricSelector, podMap)
 	cm.applyMetricToPodMap(window, MemoryRequestAverage, metricSelector, podMap)
@@ -90,36 +91,27 @@ func (cm *CostManager) ComputeAllocation(costType types.CostType, start, end tim
 	weightCPU, weightRAM := getCostWeights()
 	totalCost := cm.getSingleValueMetric(CostTotal, metricSelector)
 
+	totalBilling := 0.0
+	switch costType {
+	case types.AllocationPretaxAmount:
+		totalBilling = cm.getSingleValueMetric(BillingPretaxAmountTotal, metricSelector)
+	case types.AllocationPretaxGrossAmount:
+		totalBilling = cm.getSingleValueMetric(BillingPretaxGrossAmountTotal, metricSelector)
+	}
+
 	for _, pod := range podMap {
 		pod.Allocations.Cost = pod.Allocations.CostCPURequest*weightCPU + pod.Allocations.CostRAMRequest*weightRAM
 
 		if totalCost != 0 {
 			pod.Allocations.CostRatio = pod.Allocations.Cost / totalCost
+
+			if apiType == TypeAllocation {
+				pod.Allocations.Cost = pod.Allocations.CostRatio * totalBilling
+			}
 		}
-	}
 
-	//for _, namespace := range filter.Namespace {
-	//	// init podMap metadata
-	//	cm.buildPodMap(window, podMap, namespace, metricSelector)
-	//	cm.applyMetricToPodMap(window, namespace, cost.COST_CPU_REQUEST, metricSelector, podMap)
-	//}
-
-	//namespaces, err := cm.client.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
-	//metricSelector, err := labels.Parse("")
-	//if err != nil {
-	//}
-	//
-	//for _, namespace := range namespaces.Items {
-	//	// init podMap metadata
-	//	cm.buildPodMap(window, podMap, namespace.Name, metricSelector)
-	//	cm.applyMetricToPodMap(namespace.Name, cost.COST_CPU_REQUEST, metricSelector, podMap)
-	//}
-
-	for _, pod := range podMap {
 		allocSet.Set(pod.Allocations)
 	}
-	//klog.Infof("ComputeAllocation: window: %v", allocSet)
-	//allocSet.Window = window
 
 	return allocSet, nil
 }
@@ -198,7 +190,7 @@ func getCostWeights() (cpu, memory float64) {
 	return costWeights.CPU, costWeights.Memory
 }
 
-func (cm *CostManager) GetRangeAllocation(costType types.CostType, window types.Window, resolution, step time.Duration, aggregate []string, filter *types.Filter, format string, accumulateBy AccumulateOption) (*types.AllocationSetRange, error) {
+func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, resolution, step time.Duration, aggregate []string, filter *types.Filter, format string, accumulateBy AccumulateOption, costType types.CostType) (*types.AllocationSetRange, error) {
 	klog.Infof("get range allocation params: window: %s, resolution: %s, step: %s, aggregate: %s, filter: %s, format: %s, accumulateBy: %s", window, resolution, step, aggregate, filter, format, accumulateBy)
 
 	// Validate window is legal
@@ -214,7 +206,7 @@ func (cm *CostManager) GetRangeAllocation(costType types.CostType, window types.
 	stepStart := *window.Start()
 	stepEnd := stepStart.Add(step)
 	for window.End().After(stepStart) {
-		allocSet, err := cm.ComputeAllocation(costType, stepStart, stepEnd, resolution, filter)
+		allocSet, err := cm.ComputeAllocation(apiType, stepStart, stepEnd, resolution, filter, costType)
 		if err != nil {
 			return nil, fmt.Errorf("error computing allocations for %s: %w", types.NewClosedWindow(stepStart, stepEnd), err)
 		}
@@ -228,7 +220,7 @@ func (cm *CostManager) GetRangeAllocation(costType types.CostType, window types.
 		}
 	}
 
-	// Aggregate
+	// todo Aggregate
 	err := asr.AggregateBy(aggregate)
 	if err != nil {
 		return nil, fmt.Errorf("error aggregating for %s: %w", window, err)
@@ -310,6 +302,9 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", err), http.StatusBadRequest)
 	}
+	if window.Duration() < time.Hour*24 {
+		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", fmt.Errorf("window duration should be at least 1 day")), http.StatusBadRequest)
+	}
 
 	filter := &types.Filter{}
 	if filterStr, ok := paramsMap["filter"]; ok {
@@ -331,12 +326,17 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// todo: this param need to follow finops focus, now default is PretaxAmount
+	if costType, ok := paramsMap["costType"]; ok {
+		klog.Infof("compute allocation params: costType: %s", costType)
+	}
+
 	// todo: parse other params
 	aggregate := make([]string, 0)
 	resolution := time.Duration(0)
 
 	cm := NewCostManager()
-	asr, err := cm.GetRangeAllocation(types.TypeAllocation, window, resolution, step, aggregate, filter, "", AccumulateOptionNone)
+	asr, err := cm.GetRangeAllocation(TypeAllocation, window, resolution, step, aggregate, filter, "", AccumulateOptionNone, types.AllocationPretaxAmount)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "bad request") {
 			WriteError(w, BadRequest(err.Error()))
@@ -365,6 +365,9 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", err), http.StatusBadRequest)
 	}
+	if window.Duration() < time.Hour {
+		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", fmt.Errorf("window duration should be at least 1 hour")), http.StatusBadRequest)
+	}
 
 	filter := &types.Filter{}
 	if filterStr, ok := paramsMap["filter"]; ok {
@@ -391,7 +394,7 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 	resolution := time.Duration(0)
 
 	cm := NewCostManager()
-	asr, err := cm.GetRangeAllocation(types.TypeCost, window, resolution, step, aggregate, filter, "", AccumulateOptionNone)
+	asr, err := cm.GetRangeAllocation(TypeCost, window, resolution, step, aggregate, filter, "", AccumulateOptionNone, types.CostEstimated)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "bad request") {
 			WriteError(w, BadRequest(err.Error()))

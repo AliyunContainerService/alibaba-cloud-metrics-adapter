@@ -15,7 +15,7 @@ func TestParseFilter(t *testing.T) {
 	}{
 		{
 			name:      "Valid filter string",
-			filterStr: `namespace:"default","kube-system"+controllerName:"deployment","daemonset"+controllerKind:"deployment","daemonset"+pod:"qwqwqwqw","qdqd23124e!@!$$%#$%"+label[app+1q]:"nginx-/!@#+_)(webserver"`,
+			filterStr: `namespace:"default","kube-system"+controllerName:"deployment","daemonset"+controllerKind:"deployment","daemonset"+pod:"qwqwqwqw","qdqd23124e!@!$$%#$%"+label[app+1q]:"nginx-/!@#+_)(webserver","ssd"`,
 			//filterStr: `pod:"terway-eniip-rv8sf" namespace:"kube-system"`,
 			want: &Filter{
 				Namespace:      []string{"default", "kube-system"},

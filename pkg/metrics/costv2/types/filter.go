@@ -16,15 +16,6 @@ type Filter struct {
 	Label          map[string][]string
 }
 
-//func (f *Filter) GetLabelSelectorStr() string {
-//	if f.GetKubePodLabelStr() == "" {
-//		return fmt.Sprintf(`namespace=%s,created_by_kind=%s,created_by_name=%s,pod=%s`,
-//			f.getNamespaceStr(), f.getControllerKindStr(), f.getControllerNameStr(), f.getPodStr())
-//	}
-//	return fmt.Sprintf(`namespace=%s,created_by_kind=%s,created_by_name=%s,pod=%s,%s`,
-//		f.getNamespaceStr(), f.getControllerKindStr(), f.getControllerNameStr(), f.getPodStr(), f.GetKubePodLabelStr())
-//}
-
 func (f *Filter) GetLabelSelectorStr() string {
 	var requirements []labels.Requirement
 

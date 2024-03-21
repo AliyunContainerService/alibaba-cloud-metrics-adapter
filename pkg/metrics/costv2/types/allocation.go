@@ -1,15 +1,15 @@
 package costv2
 
 import (
-	"encoding/json"
 	"time"
 )
 
 type CostType string
 
 const (
-	TypeAllocation CostType = "allocations"
-	TypeCost       CostType = "costs"
+	AllocationPretaxAmount      CostType = "allocation_pretax_amount"
+	AllocationPretaxGrossAmount CostType = "allocation_pretax_gross_amount"
+	CostEstimated               CostType = "cost_estimated"
 )
 
 type Allocation struct {
@@ -40,27 +40,23 @@ type AllocationProperties struct {
 	Labels         map[string]string `json:"labels,omitempty"`
 }
 
-type AllocationSet struct {
-	Allocations map[string]*Allocation `json:"allocations"`
-	Window      Window                 `json:"window"`
-	Type        string
-}
+//	type AllocationSet struct {
+//		Allocations map[string]*Allocation `json:"allocations"`
+//		Window      Window                 `json:"window"`
+//		Type        string
+//	}
+type AllocationSet map[string]*Allocation
 
 // NewAllocationSet instantiates a new AllocationSet
-func NewAllocationSet(costType CostType, start, end time.Time) *AllocationSet {
-	as := &AllocationSet{
-		Allocations: map[string]*Allocation{},
-		Window:      NewWindow(&start, &end),
-		Type:        string(costType),
-	}
-
-	return as
+func NewAllocationSet() *AllocationSet {
+	as := AllocationSet(make(map[string]*Allocation))
+	return &as
 }
 
 // IsEmpty returns true if the AllocationSet is nil, or if it contains
 // zero allocations.
 func (as *AllocationSet) IsEmpty() bool {
-	if as == nil || len(as.Allocations) == 0 {
+	if as == nil || len(*as) == 0 {
 		return true
 	}
 
@@ -71,26 +67,26 @@ func (as *AllocationSet) IsEmpty() bool {
 // AllocationSet under the Allocation's name.
 func (as *AllocationSet) Set(alloc *Allocation) error {
 	if as.IsEmpty() {
-		as.Allocations = map[string]*Allocation{}
+		*as = map[string]*Allocation{}
 	}
 
-	as.Allocations[alloc.Name] = alloc
+	(*as)[alloc.Name] = alloc
 
 	return nil
 }
 
-func (as *AllocationSet) MarshalJSON() ([]byte, error) {
-	jsonMap := make(map[string]interface{})
-
-	if as.Type != "" {
-		jsonMap[as.Type] = as.Allocations
-	} else {
-		jsonMap["allocations"] = as.Allocations
-	}
-	jsonMap["window"] = as.Window
-
-	return json.Marshal(jsonMap)
-}
+//func (as *AllocationSet) MarshalJSON() ([]byte, error) {
+//	jsonMap := make(map[string]interface{})
+//
+//	if as.Type != "" {
+//		jsonMap[as.Type] = as.Allocations
+//	} else {
+//		jsonMap["allocations"] = as.Allocations
+//	}
+//	jsonMap["window"] = as.Window
+//
+//	return json.Marshal(jsonMap)
+//}
 
 func (as *AllocationSet) AggregateBy(aggregateBy []string) error {
 	return nil
