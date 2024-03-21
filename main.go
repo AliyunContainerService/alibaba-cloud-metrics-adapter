@@ -43,7 +43,8 @@ func main() {
 	})
 	// export cost metrics api
 	http.HandleFunc("/cost", cost.Handler)
-	http.HandleFunc("/v2/allocation", costv2.ComputeAllocationHandler)
+	http.HandleFunc("/v2/cost", costv2.ComputeEstimatedCostHandler)
+	//http.HandleFunc("/v2/allocation", costv2.ComputeAllocationHandler)
 	go func() {
 		http.ListenAndServe(":8080", nil)
 	}()

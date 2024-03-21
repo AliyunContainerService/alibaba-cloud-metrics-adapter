@@ -217,7 +217,8 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 		fmt.Println("Error parsing end time:", err)
 		return
 	}
-	durStr := fmt.Sprintf("%s:%s", util.DurationString(end.Sub(start)), "1h")
+	duration := end.Sub(start)
+	durStr := fmt.Sprintf("%s:%s", util.DurationString(duration), util.ResolutionString(duration))
 
 	switch metricName {
 	case CPUCoreRequestAverage:

@@ -1,20 +1,28 @@
 package costv2
 
 import (
+	"encoding/json"
 	"time"
+)
+
+type CostType string
+
+const (
+	TypeAllocation CostType = "allocations"
+	TypeCost       CostType = "costs"
 )
 
 type Allocation struct {
 	Name       string                `json:"name"`
 	Properties *AllocationProperties `json:"properties,omitempty"`
 	//Window               *Window                `json:"window"`
-	Start                 time.Time `json:"start"`
-	End                   time.Time `json:"end"`
-	CPUCoreHours          float64   `json:"cpuCoreHours"`
-	CPUCoreRequestAverage float64   `json:"cpuCoreRequestAverage"`
-	CPUCoreUsageAverage   float64   `json:"cpuCoreUsageAverage"`
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
+	//CPUCoreHours          float64   `json:"cpuCoreHours"`
+	CPUCoreRequestAverage float64 `json:"cpuCoreRequestAverage"`
+	CPUCoreUsageAverage   float64 `json:"cpuCoreUsageAverage"`
 	//GPUHours               float64               `json:"gpuHours"`
-	RAMByteHours           float64 `json:"ramByteHours"`
+	//RAMByteHours           float64 `json:"ramByteHours"`
 	RAMBytesRequestAverage float64 `json:"ramByteRequestAverage"`
 	RAMBytesUsageAverage   float64 `json:"ramByteUsageAverage"`
 	Cost                   float64 `json:"cost"`
@@ -35,13 +43,15 @@ type AllocationProperties struct {
 type AllocationSet struct {
 	Allocations map[string]*Allocation `json:"allocations"`
 	Window      Window                 `json:"window"`
+	Type        string
 }
 
 // NewAllocationSet instantiates a new AllocationSet
-func NewAllocationSet(start, end time.Time) *AllocationSet {
+func NewAllocationSet(costType CostType, start, end time.Time) *AllocationSet {
 	as := &AllocationSet{
 		Allocations: map[string]*Allocation{},
 		Window:      NewWindow(&start, &end),
+		Type:        string(costType),
 	}
 
 	return as
@@ -67,6 +77,19 @@ func (as *AllocationSet) Set(alloc *Allocation) error {
 	as.Allocations[alloc.Name] = alloc
 
 	return nil
+}
+
+func (as *AllocationSet) MarshalJSON() ([]byte, error) {
+	jsonMap := make(map[string]interface{})
+
+	if as.Type != "" {
+		jsonMap[as.Type] = as.Allocations
+	} else {
+		jsonMap["allocations"] = as.Allocations
+	}
+	jsonMap["window"] = as.Window
+
+	return json.Marshal(jsonMap)
 }
 
 func (as *AllocationSet) AggregateBy(aggregateBy []string) error {

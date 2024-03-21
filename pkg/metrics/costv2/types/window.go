@@ -161,7 +161,8 @@ func parseWindow(window string, now time.Time) (Window, error) {
 		start = start.Truncate(time.Hour * 24)
 		start = start.Add(offset)
 
-		end := start.Add(time.Hour * 24)
+		//end := start.Add(time.Hour * 24)
+		end := now
 
 		return NewWindow(&start, &end), nil
 	}
@@ -273,10 +274,10 @@ func parseWindow(window string, now time.Time) (Window, error) {
 		// let "the past X days" be defined as the entirety of today plus the entirety of the past X-1 days, where
 		// "entirety" is defined as midnight to midnight, UTC. given this definition, we round forward the calculated
 		// start and end times to the nearest day to align with midnight boundaries
-		if match[2] == "d" || match[2] == "w" {
-			end = end.Truncate(util.Day).Add(util.Day)
-			start = start.Truncate(util.Day).Add(util.Day)
-		}
+		//if match[2] == "d" || match[2] == "w" {
+		//	end = end.Truncate(util.Day).Add(util.Day)
+		//	start = start.Truncate(util.Day).Add(util.Day)
+		//}
 
 		return NewWindow(&start, &end), nil
 	}

@@ -56,11 +56,11 @@ func (cm *CostManager) getExternalMetrics(namespace, metricName string, metricSe
 	return metrics
 }
 
-func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.Duration, filter *types.Filter) (*types.AllocationSet, error) {
+func (cm *CostManager) ComputeAllocation(costType types.CostType, start, end time.Time, resolution time.Duration, filter *types.Filter) (*types.AllocationSet, error) {
 	klog.V(4).Infof("ComputeAllocation: start: %v, end: %v, resolution: %v, filter: %v", start, end, resolution, filter)
 
 	window := types.NewWindow(&start, &end)
-	allocSet := types.NewAllocationSet(start, end)
+	allocSet := types.NewAllocationSet(costType, start, end)
 	podMap := map[types.PodMeta]*types.Pod{}
 
 	// parse from filter
@@ -117,8 +117,8 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, resolution time.D
 	for _, pod := range podMap {
 		allocSet.Set(pod.Allocations)
 	}
-	klog.Infof("ComputeAllocation: window: %v", allocSet)
-	allocSet.Window = window
+	//klog.Infof("ComputeAllocation: window: %v", allocSet)
+	//allocSet.Window = window
 
 	return allocSet, nil
 }
@@ -195,7 +195,7 @@ func getCostWeights() (cpu, memory float64) {
 	return costWeights.CPU, costWeights.Memory
 }
 
-func (cm *CostManager) GetRangeAllocation(window types.Window, resolution, step time.Duration, aggregate []string, filter *types.Filter, format string, accumulateBy AccumulateOption) (*types.AllocationSetRange, error) {
+func (cm *CostManager) GetRangeAllocation(costType types.CostType, window types.Window, resolution, step time.Duration, aggregate []string, filter *types.Filter, format string, accumulateBy AccumulateOption) (*types.AllocationSetRange, error) {
 	klog.Infof("get range allocation params: window: %s, resolution: %s, step: %s, aggregate: %s, filter: %s, format: %s, accumulateBy: %s", window, resolution, step, aggregate, filter, format, accumulateBy)
 
 	// Validate window is legal
@@ -211,7 +211,7 @@ func (cm *CostManager) GetRangeAllocation(window types.Window, resolution, step 
 	stepStart := *window.Start()
 	stepEnd := stepStart.Add(step)
 	for window.End().After(stepStart) {
-		allocSet, err := cm.ComputeAllocation(stepStart, stepEnd, resolution, filter)
+		allocSet, err := cm.ComputeAllocation(costType, stepStart, stepEnd, resolution, filter)
 		if err != nil {
 			return nil, fmt.Errorf("error computing allocations for %s: %w", types.NewClosedWindow(stepStart, stepEnd), err)
 		}
@@ -221,7 +221,7 @@ func (cm *CostManager) GetRangeAllocation(window types.Window, resolution, step 
 		stepStart = stepEnd
 		stepEnd = stepStart.Add(step)
 		if stepEnd.After(*window.End()) {
-			stepStart = *window.End()
+			stepEnd = *window.End()
 		}
 	}
 
@@ -239,13 +239,13 @@ func (cm *CostManager) GetRangeAllocation(window types.Window, resolution, step 
 	return asr, nil
 }
 
-func (cm *CostManager) ComputeEstimatedCost(start, end time.Time, resolution time.Duration) (*types.AllocationSet, error) {
-	return nil, nil
-}
-
-func (cm *CostManager) GetRangeEstimatedCost(window types.Window, resolution, step time.Duration, aggregate []string, filter string) (*types.AllocationSetRange, error) {
-	return nil, nil
-}
+//func (cm *CostManager) ComputeEstimatedCost(start, end time.Time, resolution time.Duration) (*types.AllocationSet, error) {
+//	return nil, nil
+//}
+//
+//func (cm *CostManager) GetRangeEstimatedCost(window types.Window, resolution, step time.Duration, aggregate []string, filter string) (*types.AllocationSetRange, error) {
+//	return nil, nil
+//}
 
 func (cm *CostManager) buildPodMap(window types.Window, podMap map[types.PodMeta]*types.Pod, namespace string, labelSelector labels.Selector) {
 	pods, err := cm.client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
@@ -333,7 +333,62 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	resolution := time.Duration(0)
 
 	cm := NewCostManager()
-	asr, err := cm.GetRangeAllocation(window, resolution, step, aggregate, filter, "", AccumulateOptionNone)
+	asr, err := cm.GetRangeAllocation(types.TypeAllocation, window, resolution, step, aggregate, filter, "", AccumulateOptionNone)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "bad request") {
+			WriteError(w, BadRequest(err.Error()))
+		} else {
+			WriteError(w, InternalServerError(err.Error()))
+		}
+
+		return
+	}
+
+	w.Header().Set("content-type", "application/json")
+	p, _ := json.Marshal(asr)
+	io.WriteString(w, string(p))
+}
+
+func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
+	res := r.URL.Query()
+	paramsMap := make(map[string]string)
+	for k, v := range res {
+		paramsMap[k] = v[0]
+	}
+	klog.Infof("compute allocation params: %v", paramsMap)
+
+	klog.Infof("compute allocation params: window: %s", paramsMap["window"])
+	window, err := types.ParseWindow(paramsMap["window"])
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", err), http.StatusBadRequest)
+	}
+
+	filter := &types.Filter{}
+	if filterStr, ok := paramsMap["filter"]; ok {
+		klog.Infof("compute allocation params: filter: %s", filterStr)
+		filter, err = types.ParseFilter(filterStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'filter' parameter: %s", err), http.StatusBadRequest)
+			return
+		}
+	}
+
+	step := window.Duration()
+	if stepStr, ok := paramsMap["step"]; ok {
+		klog.Infof("compute allocation params: step: %s", stepStr)
+		step, err = util.ParseDuration(stepStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'step' parameter: %s", err), http.StatusBadRequest)
+			return
+		}
+	}
+
+	// todo: parse other params
+	aggregate := make([]string, 0)
+	resolution := time.Duration(0)
+
+	cm := NewCostManager()
+	asr, err := cm.GetRangeAllocation(types.TypeCost, window, resolution, step, aggregate, filter, "", AccumulateOptionNone)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "bad request") {
 			WriteError(w, BadRequest(err.Error()))

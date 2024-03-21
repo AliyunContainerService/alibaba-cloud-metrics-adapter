@@ -63,6 +63,23 @@ func DurationString(duration time.Duration) string {
 	return durStr
 }
 
+func ResolutionString(duration time.Duration) string {
+	durSecs := int64(duration.Seconds())
+
+	switch {
+	case durSecs > SecsPerHour:
+		return "1h"
+	case durSecs > SecsPerMin*10:
+		return "10m"
+	case durSecs > SecsPerMin:
+		return "1m"
+	case durSecs > 10:
+		return "10s"
+	default:
+		return "1s"
+	}
+}
+
 func GetUTCTime(t time.Time) time.Time {
 	return t.Add(-8 * time.Hour)
 }
