@@ -85,6 +85,7 @@ func (cm *CostManager) ComputeAllocation(costType types.CostType, start, end tim
 	cm.applyMetricToPodMap(window, MemoryUsageAverage, metricSelector, podMap)
 	cm.applyMetricToPodMap(window, CostCPURequest, metricSelector, podMap)
 	cm.applyMetricToPodMap(window, CostMemoryRequest, metricSelector, podMap)
+	cm.applyMetricToPodMap(window, CostCustom, metricSelector, podMap)
 
 	weightCPU, weightRAM := getCostWeights()
 	totalCost := cm.getSingleValueMetric(CostTotal, metricSelector)
@@ -173,6 +174,8 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 			podMap[key].Allocations.CostCPURequest = float64(value.Value.MilliValue()) / 1000
 		case CostMemoryRequest:
 			podMap[key].Allocations.CostRAMRequest = float64(value.Value.MilliValue()) / 1000
+		case CostCustom:
+			podMap[key].Allocations.CustomCost = float64(value.Value.MilliValue()) / 1000
 		}
 	}
 }

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	FilteredPodInfo       = "filtered_pod_info"
+	// custom metric name
 	CPUCoreRequestAverage = "cpu_core_request_average"
 	CPUCoreUsageAverage   = "cpu_core_usage_average"
 	MemoryRequestAverage  = "memory_request_average"
@@ -27,7 +27,9 @@ const (
 	CostCPURequest        = "cost_cpu_request"
 	CostMemoryRequest     = "cost_memory_request"
 	CostTotal             = "cost_total"
+	CostCustom            = "cost_custom"
 
+	// PromQL
 	QueryFilteredPodInfo       = `max(kube_pod_labels{%s}) by (pod,namespace) * on(pod, namespace) group_right kube_pod_info{%s}`
 	QueryCPUCoreRequestAverage = `sum(avg_over_time(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="cpu"}[%s])) by (namespace, pod)`
 	QueryCPUCoreUsageAverage   = `sum(avg_over_time(rate(container_cpu_usage_seconds_total[1m])[%s])) by(namespace, pod)`
@@ -36,6 +38,7 @@ const (
 	QueryCostCPURequest        = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="cpu"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="cpu"})[%s])) by (namespace, pod) * 3600`
 	QueryCostMemoryRequest     = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="memory"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="memory"})[%s])) by (namespace, pod) * 3600`
 	QueryCostTotal             = `sum(sum_over_time((max(node_current_price) by (node))[%s])) * 3600`
+	QueryCostCustom            = `sum_over_time((max(label_replace(label_replace(pod_custom_price, "namespace", "$1", "exported_namespace", "(.*)"), "pod", "$1", "exported_pod", "(.*)")) by (namespace,pod))[24h:1h]) * 3600`
 )
 
 type COSTV2MetricSource struct {
@@ -53,6 +56,7 @@ func (cs *COSTV2MetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo
 		CostCPURequest,
 		CostMemoryRequest,
 		CostTotal,
+		CostCustom,
 	}
 	for _, metric := range MetricArray {
 		metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
@@ -242,6 +246,9 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 	case CostTotal:
 		item := fmt.Sprintf("%s", QueryCostTotal)
 		externalQuery = prom.Selector(fmt.Sprintf(item, durStr))
+	case CostCustom:
+		item := fmt.Sprintf("%s * %s", QueryCostCustom, QueryFilteredPodInfo)
+		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
 	}
 
 	return externalQuery
