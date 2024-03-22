@@ -37,10 +37,10 @@ const (
 	QueryCPUCoreUsageAverage           = `sum(avg_over_time(rate(container_cpu_usage_seconds_total[1m])[%s])) by(namespace, pod)`
 	QueryMemoryRequestAverage          = `sum(avg_over_time(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="memory"}[%s])) by (namespace, pod)`
 	QueryMemoryUsageAverage            = `sum(avg_over_time(container_memory_working_set_bytes[%s])) by(namespace, pod)`
-	QueryCostCPURequest                = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="cpu"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="cpu"})[%s])) by (namespace, pod) * 3600`
-	QueryCostMemoryRequest             = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="memory"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="memory"})[%s])) by (namespace, pod) * 3600`
-	QueryCostTotal                     = `sum(sum_over_time((max(node_current_price) by (node))[%s])) * 3600`
-	QueryCostCustom                    = `sum_over_time((max(label_replace(label_replace(pod_custom_price, "namespace", "$1", "exported_namespace", "(.*)"), "pod", "$1", "exported_pod", "(.*)")) by (namespace,pod))[%s]) * 3600`
+	QueryCostCPURequest                = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="cpu"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="cpu"})[%s])) by (namespace, pod) * %s`
+	QueryCostMemoryRequest             = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="memory"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="memory"})[%s])) by (namespace, pod) * %s`
+	QueryCostTotal                     = `sum(sum_over_time((max(node_current_price) by (node))[%s])) * %s`
+	QueryCostCustom                    = `sum_over_time((max(label_replace(label_replace(pod_custom_price, "namespace", "$1", "exported_namespace", "(.*)"), "pod", "$1", "exported_pod", "(.*)")) by (namespace,pod))[%s]) * %s`
 	QueryBillingPretaxAmountTotal      = `sum(sum_over_time(max(pretax_amount) by (product_code, instance_id)[%s]))`
 	QueryBillingPretaxGrossAmountTotal = `sum(sum_over_time(max(pretax_gross_amount) by (product_code, instance_id)[%s]))`
 )
@@ -169,31 +169,6 @@ func parseRequirements(requirements labels.Requirements) (requirementMap map[str
 	return requirementMap
 }
 
-func parsePromLabel(item []string) string {
-	// todo use array for multi ns, pod etc.
-	if item[0] == "" {
-		return ".*"
-	}
-	return item[0]
-}
-
-func parseKubePodInfoStr(requirementMap map[string][]string) string {
-	strList := make([]string, 0)
-	if list, ok := requirementMap["namespace"]; ok {
-		strList = append(strList, fmt.Sprintf(`namespace=~"%s"`, strings.Join(list, "|")))
-	}
-	if list, ok := requirementMap["pod"]; ok {
-		strList = append(strList, fmt.Sprintf(`pod=~"%s"`, strings.Join(list, "|")))
-	}
-	if list, ok := requirementMap["created_by_kind"]; ok {
-		strList = append(strList, fmt.Sprintf(`created_by_kind=~"%s"`, strings.Join(list, "|")))
-	}
-	if list, ok := requirementMap["created_by_name"]; ok {
-		strList = append(strList, fmt.Sprintf(`created_by_name=~"%s"`, strings.Join(list, "|")))
-	}
-	return strings.Join(strList, ",")
-}
-
 func buildExternalQuery(metricName string, requirementMap map[string][]string) (externalQuery prom.Selector) {
 	// build str for kube_pod_labels
 	kubePodLabelStr := ""
@@ -234,7 +209,8 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 		return
 	}
 	duration := end.Sub(start)
-	durStr := fmt.Sprintf("%s:%s", util.DurationString(duration), util.ResolutionString(duration))
+	resolutionStr, resolutionSecs := util.ResolutionStringAndSeconds(duration)
+	durStr := fmt.Sprintf("%s:%s", util.DurationString(duration), resolutionStr)
 
 	switch metricName {
 	case CPUCoreRequestAverage:
@@ -251,16 +227,16 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
 	case CostCPURequest:
 		item := fmt.Sprintf("%s * %s", QueryCostCPURequest, QueryFilteredPodInfo)
-		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
+		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, resolutionSecs, kubePodLabelStr, kubePodInfoStr))
 	case CostMemoryRequest:
 		item := fmt.Sprintf("%s * %s", QueryCostMemoryRequest, QueryFilteredPodInfo)
-		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
+		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, resolutionSecs, kubePodLabelStr, kubePodInfoStr))
 	case CostTotal:
 		item := fmt.Sprintf("%s", QueryCostTotal)
-		externalQuery = prom.Selector(fmt.Sprintf(item, durStr))
+		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, resolutionSecs))
 	case CostCustom:
 		item := fmt.Sprintf("%s * %s", QueryCostCustom, QueryFilteredPodInfo)
-		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
+		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, resolutionSecs, kubePodLabelStr, kubePodInfoStr))
 	case BillingPretaxAmountTotal:
 		item := fmt.Sprintf("%s", QueryBillingPretaxAmountTotal)
 		externalQuery = prom.Selector(fmt.Sprintf(item, durStr))
@@ -270,26 +246,6 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 	}
 
 	return externalQuery
-}
-
-func getPrometheusSql(metricName string) (item string) {
-	switch metricName {
-	case CPUCoreRequestAverage:
-		item = fmt.Sprintf("%s * %s", QueryCPUCoreRequestAverage, QueryFilteredPodInfo)
-	case CPUCoreUsageAverage:
-		item = fmt.Sprintf("%s * %s", QueryCPUCoreUsageAverage, QueryFilteredPodInfo)
-	case MemoryRequestAverage:
-		item = fmt.Sprintf("%s * %s", QueryMemoryRequestAverage, QueryFilteredPodInfo)
-	case MemoryUsageAverage:
-		item = fmt.Sprintf("%s * %s", QueryMemoryUsageAverage, QueryFilteredPodInfo)
-	case CostCPURequest:
-		item = fmt.Sprintf("%s * %s", QueryCostCPURequest, QueryFilteredPodInfo)
-	case CostMemoryRequest:
-		item = fmt.Sprintf("%s * %s", QueryCostMemoryRequest, QueryFilteredPodInfo)
-	case CostTotal:
-		item = fmt.Sprintf("%s", QueryCostTotal)
-	}
-	return item
 }
 
 func NewCOSTV2MetricSource() *COSTV2MetricSource {

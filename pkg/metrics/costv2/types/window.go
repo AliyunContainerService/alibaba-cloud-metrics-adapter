@@ -277,6 +277,7 @@ func parseWindow(window string, now time.Time) (Window, error) {
 		if match[2] == "d" || match[2] == "w" {
 			//end = end.Truncate(util.Day).Add(util.Day)
 			start = start.Truncate(util.Day).Add(util.Day)
+			start = start.Add(offset)
 		}
 
 		return NewWindow(&start, &end), nil
@@ -351,7 +352,16 @@ func ParseWindowWithOffset(window string, offset time.Duration) (Window, error) 
 
 func ParseWindow(window string) (Window, error) {
 	now := time.Now()
-	return parseWindow(window, now)
+	w, err := parseWindow(window, now)
+	if w.Start() != nil {
+		start := w.Start().Truncate(time.Second)
+		w.start = &start
+	}
+	if w.End() != nil {
+		end := w.End().Truncate(time.Second)
+		w.end = &end
+	}
+	return w, err
 }
 
 // NewWindow creates and returns a new Window instance from the given times
