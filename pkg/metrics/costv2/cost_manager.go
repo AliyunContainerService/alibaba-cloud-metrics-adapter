@@ -243,7 +243,7 @@ func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, 
 
 func (cm *CostManager) getSingleValueMetric(metricName string, metricSelector labels.Selector) float64 {
 	valueList := cm.getExternalMetrics("*", metricName, metricSelector)
-	if len(valueList.Items) == 0 {
+	if valueList == nil || len(valueList.Items) == 0 {
 		return 0
 	}
 	return float64(valueList.Items[0].Value.MilliValue())
