@@ -95,6 +95,12 @@ func (cs *COSTV2MetricSource) getCOSTMetricsAtTime(namespace, metricName string,
 		return nil, err
 	}
 
+	// billing metrics are always 00:00:00, add -1 second to avoid data duplication
+	if metricName == BillingPretaxGrossAmountTotal || metricName == BillingPretaxAmountTotal {
+		if end.Hour() == 0 && end.Minute() == 0 && end.Second() == 0 {
+			end = end.Add(-time.Second)
+		}
+	}
 	endUTC := util.GetUTCTime(end)
 	endTime := model.TimeFromUnixNano(endUTC.UnixNano())
 	klog.V(4).Infof("external query at UTC time %v: %v", endUTC, query)

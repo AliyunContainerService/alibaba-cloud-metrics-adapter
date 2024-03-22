@@ -260,9 +260,11 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	window, err := types.ParseWindow(paramsMap["window"])
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", err), http.StatusBadRequest)
+		return
 	}
 	if window.Duration() < time.Hour*24 {
 		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", fmt.Errorf("window duration should be at least 1 day")), http.StatusBadRequest)
+		return
 	}
 
 	filter := &types.Filter{}
