@@ -9,6 +9,7 @@ type Pod struct {
 	Key         PodMeta
 	Node        string
 	Allocations *Allocation
+	CostMeta    PodCostMeta
 }
 
 type PodMeta struct {
@@ -18,4 +19,9 @@ type PodMeta struct {
 
 func (m PodMeta) String() string {
 	return fmt.Sprintf("%s/%s", m.Namespace, m.Pod)
+}
+
+type PodCostMeta struct {
+	CostCPURequest float64
+	CostRAMRequest float64
 }

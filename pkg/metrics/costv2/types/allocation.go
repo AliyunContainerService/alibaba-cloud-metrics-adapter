@@ -28,8 +28,6 @@ type Allocation struct {
 	Cost                   float64 `json:"cost"`
 	CostRatio              float64 `json:"costRatio"`
 	CustomCost             float64 `json:"customCost"`
-	CostCPURequest         float64 `json:"-"`
-	CostRAMRequest         float64 `json:"-"`
 }
 
 type AllocationProperties struct {
@@ -67,26 +65,13 @@ func (as *AllocationSet) IsEmpty() bool {
 // AllocationSet under the Allocation's name.
 func (as *AllocationSet) Set(alloc *Allocation) error {
 	if as.IsEmpty() {
-		*as = map[string]*Allocation{}
+		*as = make(map[string]*Allocation)
 	}
 
 	(*as)[alloc.Name] = alloc
 
 	return nil
 }
-
-//func (as *AllocationSet) MarshalJSON() ([]byte, error) {
-//	jsonMap := make(map[string]interface{})
-//
-//	if as.Type != "" {
-//		jsonMap[as.Type] = as.Allocations
-//	} else {
-//		jsonMap["allocations"] = as.Allocations
-//	}
-//	jsonMap["window"] = as.Window
-//
-//	return json.Marshal(jsonMap)
-//}
 
 func (as *AllocationSet) AggregateBy(aggregateBy []string) error {
 	return nil

@@ -33,9 +33,9 @@ const (
 
 	// PromQL
 	QueryFilteredPodInfo               = `max(kube_pod_labels{%s}) by (pod,namespace) * on(pod, namespace) group_right kube_pod_info{%s}`
-	QueryCPUCoreRequestAverage         = `sum(avg_over_time(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="cpu"}[%s])) by (namespace, pod)`
+	QueryCPUCoreRequestAverage         = `sum(avg_over_time((max(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="cpu"}) by (pod,namespace,container))[%s])) by (namespace, pod)`
 	QueryCPUCoreUsageAverage           = `sum(avg_over_time(rate(container_cpu_usage_seconds_total[1m])[%s])) by(namespace, pod)`
-	QueryMemoryRequestAverage          = `sum(avg_over_time(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="memory"}[%s])) by (namespace, pod)`
+	QueryMemoryRequestAverage          = `sum(avg_over_time((max(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="memory"}) by (pod,namespace,container))[%s])) by (namespace, pod)`
 	QueryMemoryUsageAverage            = `sum(avg_over_time(container_memory_working_set_bytes[%s])) by(namespace, pod)`
 	QueryCostCPURequest                = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="cpu"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="cpu"})[%s])) by (namespace, pod) * %s`
 	QueryCostMemoryRequest             = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="memory"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="memory"})[%s])) by (namespace, pod) * %s`
@@ -81,14 +81,14 @@ func (cs *COSTV2MetricSource) GetExternalMetric(info p.ExternalMetricInfo, names
 		fmt.Println("Error parsing end time:", err)
 		return
 	}
-	values, err = cs.getCOSTMetricsAtTime(namespace, info.Metric, query, end)
+	values, err = cs.getCostMetricsAtTime(namespace, info.Metric, query, end)
 	if err != nil {
 		klog.Warningf("Failed to GetExternalMetric %s,because of %v", info.Metric, err)
 	}
 	return values, err
 }
 
-func (cs *COSTV2MetricSource) getCOSTMetricsAtTime(namespace, metricName string, query prom.Selector, end time.Time) ([]external_metrics.ExternalMetricValue, error) {
+func (cs *COSTV2MetricSource) getCostMetricsAtTime(namespace, metricName string, query prom.Selector, end time.Time) ([]external_metrics.ExternalMetricValue, error) {
 	client, err := prometheusProvider.GlobalConfig.MakePromClient()
 	if err != nil {
 		klog.Errorf("Failed to create prometheus client,because of %v", err)
@@ -110,7 +110,7 @@ func (cs *COSTV2MetricSource) getCOSTMetricsAtTime(namespace, metricName string,
 		klog.Errorf("unable to fetch metrics from prometheus: %v", err)
 		return nil, apierr.NewInternalError(fmt.Errorf("unable to fetch metrics"))
 	}
-	klog.V(4).Infof("queryResult for %s: %v", metricName, queryResult)
+	klog.V(4).Infof("fetch metrics successfully, queryResult for %s: %v", metricName, queryResult)
 
 	return cs.convertVector(metricName, queryResult)
 }
@@ -161,11 +161,10 @@ func parseRequirements(requirements labels.Requirements) (requirementMap map[str
 	requirementMap = make(map[string][]string)
 
 	for _, value := range requirements {
-		klog.Infof("requirement key: %s, value: %s", value.Key(), value.Values().List()[0])
 		requirementMap[value.Key()] = value.Values().List()
 	}
 
-	klog.Infof("requirementMap: %v", requirementMap)
+	klog.Infof("parse requirements to requirementMap: %v", requirementMap)
 	return requirementMap
 }
 
@@ -173,6 +172,8 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 	// build str for kube_pod_labels
 	kubePodLabelStr := ""
 	for key, value := range requirementMap {
+		// only support single label currently
+		// todo: check promql special symbol conversion, eg. "label_a/b" -> "label_a_b"
 		if strings.HasPrefix(key, "label_") {
 			kubePodLabelStr = fmt.Sprintf(`%s=~"%s"`, key, value[0])
 		}
@@ -200,12 +201,12 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 	layout := requirementMap["window_layout"][0]
 	start, err := time.Parse(layout, requirementMap["window_start"][0])
 	if err != nil {
-		fmt.Println("Error parsing start time:", err)
+		klog.Errorf("Error parsing start time: %v", err)
 		return
 	}
 	end, err := time.Parse(layout, requirementMap["window_end"][0])
 	if err != nil {
-		fmt.Println("Error parsing end time:", err)
+		klog.Errorf("Error parsing end time: %v", err)
 		return
 	}
 	duration := end.Sub(start)

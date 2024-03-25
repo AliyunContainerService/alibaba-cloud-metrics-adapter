@@ -13,6 +13,13 @@ import (
 )
 
 const (
+	today     = "today"
+	yesterday = "yesterday"
+	week      = "week"
+	lastweek  = "lastweek"
+	month     = "month"
+	lastmonth = "lastmonth"
+
 	WindowLayout = "20060102150405"
 )
 
@@ -156,7 +163,7 @@ func parseWindow(window string, now time.Time) (Window, error) {
 	offMin := (now.UTC().Minute() - now.Minute()) + (offHr * 60)
 	offset := time.Duration(offMin) * time.Minute
 
-	if window == "today" {
+	if window == today {
 		start := now
 		start = start.Truncate(time.Hour * 24)
 		start = start.Add(offset)
@@ -167,7 +174,7 @@ func parseWindow(window string, now time.Time) (Window, error) {
 		return NewWindow(&start, &end), nil
 	}
 
-	if window == "yesterday" {
+	if window == yesterday {
 		start := now
 		start = start.Truncate(time.Hour * 24)
 		start = start.Add(offset)
@@ -178,7 +185,7 @@ func parseWindow(window string, now time.Time) (Window, error) {
 		return NewWindow(&start, &end), nil
 	}
 
-	if window == "week" {
+	if window == week {
 		// now
 		start := now
 		// 00:00 today, accounting for timezone offset
@@ -192,7 +199,7 @@ func parseWindow(window string, now time.Time) (Window, error) {
 		return NewWindow(&start, &end), nil
 	}
 
-	if window == "lastweek" {
+	if window == lastweek {
 		// now
 		start := now
 		// 00:00 today, accounting for timezone offset
@@ -206,7 +213,7 @@ func parseWindow(window string, now time.Time) (Window, error) {
 		return NewWindow(&start, &end), nil
 	}
 
-	if window == "month" {
+	if window == month {
 		// now
 		start := now
 		// 00:00 today, accounting for timezone offset
@@ -220,21 +227,7 @@ func parseWindow(window string, now time.Time) (Window, error) {
 		return NewWindow(&start, &end), nil
 	}
 
-	if window == "month" {
-		// now
-		start := now
-		// 00:00 today, accounting for timezone offset
-		start = start.Truncate(time.Hour * 24)
-		start = start.Add(offset)
-		// 00:00 1st of this month
-		start = start.Add(-24 * time.Hour * time.Duration(start.Day()-1))
-
-		end := now
-
-		return NewWindow(&start, &end), nil
-	}
-
-	if window == "lastmonth" {
+	if window == lastmonth {
 		// now
 		end := now
 		// 00:00 today, accounting for timezone offset

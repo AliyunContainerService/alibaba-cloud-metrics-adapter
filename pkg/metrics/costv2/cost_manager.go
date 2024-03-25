@@ -75,6 +75,7 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 
 	metricSelector, err := labels.Parse(strings.Join(selectorStr, ","))
 	if err != nil {
+		klog.Errorf("failed to parse metricSelector, error: %v", err)
 		return nil, err
 	}
 
@@ -99,7 +100,7 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 	klog.Infof("compute allocation for %v API. totalCost: %v, totalBilling: %v", apiType, totalCost, totalBilling)
 
 	for _, pod := range podMap {
-		pod.Allocations.Cost = pod.Allocations.CostCPURequest*weightCPU + pod.Allocations.CostRAMRequest*weightRAM
+		pod.Allocations.Cost = pod.CostMeta.CostCPURequest*weightCPU + pod.CostMeta.CostRAMRequest*weightRAM
 
 		if totalCost != 0 {
 			pod.Allocations.CostRatio = pod.Allocations.Cost / totalCost
@@ -118,16 +119,19 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName string, metricSelector labels.Selector, podMap map[types.PodMeta]*types.Pod) {
 	valueList := cm.getExternalMetrics("*", metricName, metricSelector)
 	if valueList == nil || valueList.Items == nil {
+		klog.Errorf("external metric %s value is empty", metricName)
 		return
 	}
 	for _, value := range valueList.Items {
 		pod, ok := value.MetricLabels["pod"]
 		if !ok {
+			klog.Errorf("failed to get pod name from external metric %s value", metricName)
 			return
 		}
 
 		namespace, ok := value.MetricLabels["namespace"]
 		if !ok {
+			klog.Errorf("failed to get pod namespace from external metric %s value", metricName)
 			return
 		}
 
@@ -162,9 +166,9 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 		case MemoryUsageAverage:
 			podMap[key].Allocations.RAMBytesUsageAverage = float64(value.Value.MilliValue()) / 1000
 		case CostCPURequest:
-			podMap[key].Allocations.CostCPURequest = float64(value.Value.MilliValue()) / 1000
+			podMap[key].CostMeta.CostCPURequest = float64(value.Value.MilliValue()) / 1000
 		case CostMemoryRequest:
-			podMap[key].Allocations.CostRAMRequest = float64(value.Value.MilliValue()) / 1000
+			podMap[key].CostMeta.CostRAMRequest = float64(value.Value.MilliValue()) / 1000
 		case CostCustom:
 			podMap[key].Allocations.CustomCost = float64(value.Value.MilliValue()) / 1000
 		}
@@ -182,10 +186,10 @@ func getCostWeights() (cpu, memory float64) {
 	costWeights := CostWeights{}
 	err := json.Unmarshal([]byte(costWeightsStr), &costWeights)
 	if err != nil {
-		fmt.Println("Error parsing cost weights:", err)
+		klog.Errorf("error parsing cost weights from %s, fallback to cpu weight 100%. error: %v", costWeightsStr, err)
 		return 1, 0
 	}
-	klog.Infof("cost weights: cpu: %f, memory: %f, gpu: %f", costWeights.CPU, costWeights.Memory, costWeights.GPU)
+	klog.Infof("parsed cost weights: cpu: %f, memory: %f, gpu: %f", costWeights.CPU, costWeights.Memory, costWeights.GPU)
 	return costWeights.CPU, costWeights.Memory
 }
 
@@ -244,9 +248,10 @@ func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, 
 func (cm *CostManager) getSingleValueMetric(metricName string, metricSelector labels.Selector) float64 {
 	valueList := cm.getExternalMetrics("*", metricName, metricSelector)
 	if valueList == nil || len(valueList.Items) == 0 {
+		klog.Errorf("external metric %s value is empty", metricName)
 		return 0
 	}
-	return float64(valueList.Items[0].Value.MilliValue())
+	return float64(valueList.Items[0].Value.MilliValue() / 1000)
 }
 
 func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
@@ -322,9 +327,7 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 	window, err := types.ParseWindow(paramsMap["window"])
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", err), http.StatusBadRequest)
-	}
-	if window.Duration() < time.Hour {
-		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", fmt.Errorf("window duration should be at least 1 hour")), http.StatusBadRequest)
+		return
 	}
 
 	filter := &types.Filter{}

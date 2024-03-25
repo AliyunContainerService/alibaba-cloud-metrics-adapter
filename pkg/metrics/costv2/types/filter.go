@@ -21,19 +21,26 @@ func (f *Filter) GetLabelSelectorStr() string {
 
 	addInRequirement := func(key string, values []string) error {
 		if len(values) == 0 {
+			klog.Infof("filter value is empty: %s", key)
 			return nil
 		}
 		r, err := labels.NewRequirement(key, selection.In, values)
 		if err != nil {
+			klog.Errorf("failed to parse filter %s to requirement, error: %v", key, err)
 			return err
 		}
 		requirements = append(requirements, *r)
 		return nil
 	}
 
-	for key, values := range f.Label {
-		if err := addInRequirement("label_"+key, values); err != nil {
-			return ""
+	if f.Label != nil {
+		for key, values := range f.Label {
+			if values == nil {
+				continue
+			}
+			if err := addInRequirement("label_"+key, values); err != nil {
+				return ""
+			}
 		}
 	}
 
@@ -53,55 +60,14 @@ func (f *Filter) GetLabelSelectorStr() string {
 		return ""
 	}
 
+	if requirements == nil {
+		klog.Infof("filter is empty, do not need to parse.")
+		return ""
+	}
+
 	selector := labels.NewSelector().Add(requirements...).String()
 
 	return selector
-}
-
-func (f *Filter) GetKubePodInfoStr() string {
-	return fmt.Sprintf(`namespace=~"%s",created_by_kind=~"%s",created_by_name=~"%s",pod=~"%s"`,
-		f.getNamespaceStr(), f.getControllerKindStr(), f.getControllerNameStr(), f.getPodStr())
-}
-
-func (f *Filter) GetKubePodLabelStr() string {
-	// only support single label currently
-	// todo: check promql special symbol conversion, eg. "label_a/b" -> "label_a_b"
-	res := ""
-	if f.Label != nil {
-		for key, value := range f.Label {
-			//res += fmt.Sprintf(`label_%s="%s"`, key, value[0])
-			res += fmt.Sprintf(`label_%s=%s`, key, value[0])
-		}
-	}
-	return res
-}
-
-func (f *Filter) getNamespaceStr() string {
-	if f.Namespace != nil {
-		return strings.Join(f.Namespace, "|")
-	}
-	return ""
-}
-
-func (f *Filter) getControllerNameStr() string {
-	if f.ControllerName != nil {
-		return strings.Join(f.ControllerName, "|")
-	}
-	return ""
-}
-
-func (f *Filter) getControllerKindStr() string {
-	if f.ControllerKind != nil {
-		return strings.Join(f.ControllerKind, "|")
-	}
-	return ""
-}
-
-func (f *Filter) getPodStr() string {
-	if f.Pod != nil {
-		return strings.Join(f.Pod, "|")
-	}
-	return ""
 }
 
 // parseFilterParts Split the filter string
@@ -121,7 +87,6 @@ func parseValueList(values string) []string {
 	valueList := strings.Split(values, ",")
 	for i, value := range valueList {
 		valueList[i] = strings.Trim(strings.Trim(value, " "), `"`)
-		klog.Infof("valueList[%d]: %s", i, valueList[i])
 	}
 	return valueList
 }
@@ -131,7 +96,7 @@ func ParseFilter(filterStr string) (*Filter, error) {
 	filter := &Filter{}
 
 	filterParts := parseFilterParts(filterStr)
-	klog.Infof("filterParts: %v", filterParts)
+	klog.Infof("split the filterStr to filterParts: %v", filterParts)
 
 	for _, part := range filterParts {
 		if part == "" {
@@ -144,11 +109,9 @@ func ParseFilter(filterStr string) (*Filter, error) {
 		if len(kv) != 2 {
 			return nil, fmt.Errorf("invalid filter format: %s", part)
 		}
-		klog.Infof("kv: %s,    %s", kv[0], kv[1])
 
 		key := strings.Trim(kv[0], `"`)
 		values := strings.Trim(kv[1], `+`)
-		klog.Infof("key: %s,    value: %s", key, values)
 
 		switch {
 		case strings.HasPrefix(key, "namespace"):
