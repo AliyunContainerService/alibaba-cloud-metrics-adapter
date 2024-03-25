@@ -14,6 +14,7 @@ import (
 	externalv1beta1 "k8s.io/metrics/pkg/apis/external_metrics/v1beta1"
 	externalclient "k8s.io/metrics/pkg/client/external_metrics"
 	"log"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -109,6 +110,9 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 				pod.Allocations.Cost = pod.Allocations.CostRatio * totalBilling
 			}
 		}
+
+		pod.Allocations.CostRatio = math.Round(pod.Allocations.CostRatio*1000) / 1000
+		pod.Allocations.Cost = math.Round(pod.Allocations.Cost*1000) / 1000
 
 		allocSet.Set(pod.Allocations)
 	}
