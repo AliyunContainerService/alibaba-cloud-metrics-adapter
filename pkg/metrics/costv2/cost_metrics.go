@@ -24,8 +24,8 @@ const (
 	CPUCoreUsageAverage           = "cpu_core_usage_average"
 	MemoryRequestAverage          = "memory_request_average"
 	MemoryUsageAverage            = "memory_usage_average"
-	CostCPURequest                = "cost_cpu_request"
-	CostMemoryRequest             = "cost_memory_request"
+	CostPodCPURequest             = "cost_pod_cpu_request"
+	CostPodMemoryRequest          = "cost_pod_memory_request"
 	CostTotal                     = "cost_total"
 	CostCustom                    = "cost_custom"
 	BillingPretaxAmountTotal      = "billing_pretax_amount_total"
@@ -37,8 +37,8 @@ const (
 	QueryCPUCoreUsageAverage           = `sum(avg_over_time(rate(container_cpu_usage_seconds_total[1m])[%s])) by(namespace, pod)`
 	QueryMemoryRequestAverage          = `sum(avg_over_time((max(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="memory"}) by (pod,namespace,container))[%s])) by (namespace, pod)`
 	QueryMemoryUsageAverage            = `sum(avg_over_time(container_memory_working_set_bytes[%s])) by(namespace, pod)`
-	QueryCostCPURequest                = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="cpu"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="cpu"})[%s])) by (namespace, pod) * %s`
-	QueryCostMemoryRequest             = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="memory"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="memory"})[%s])) by (namespace, pod) * %s`
+	QueryCostPodCPURequest             = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="cpu"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="cpu"})[%s])) by (namespace, pod) * %s`
+	QueryCostPodMemoryRequest          = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="memory"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="memory"})[%s])) by (namespace, pod) * %s`
 	QueryCostTotal                     = `sum(sum_over_time((max(node_current_price) by (node))[%s])) * %s`
 	QueryCostCustom                    = `sum_over_time((max(label_replace(label_replace(pod_custom_price, "namespace", "$1", "exported_namespace", "(.*)"), "pod", "$1", "exported_pod", "(.*)")) by (namespace,pod))[%s]) * %s`
 	QueryBillingPretaxAmountTotal      = `sum(sum_over_time(max(pretax_amount) by (product_code, instance_id)[%s]))`
@@ -57,8 +57,8 @@ func (cs *COSTV2MetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo
 		CPUCoreUsageAverage,
 		MemoryRequestAverage,
 		MemoryUsageAverage,
-		CostCPURequest,
-		CostMemoryRequest,
+		CostPodCPURequest,
+		CostPodMemoryRequest,
 		CostTotal,
 		CostCustom,
 		BillingPretaxAmountTotal,
@@ -226,11 +226,11 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 	case MemoryUsageAverage:
 		item := fmt.Sprintf("%s * %s", QueryMemoryUsageAverage, QueryFilteredPodInfo)
 		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, kubePodLabelStr, kubePodInfoStr))
-	case CostCPURequest:
-		item := fmt.Sprintf("%s * %s", QueryCostCPURequest, QueryFilteredPodInfo)
+	case CostPodCPURequest:
+		item := fmt.Sprintf("%s * %s", QueryCostPodCPURequest, QueryFilteredPodInfo)
 		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, resolutionSecs, kubePodLabelStr, kubePodInfoStr))
-	case CostMemoryRequest:
-		item := fmt.Sprintf("%s * %s", QueryCostMemoryRequest, QueryFilteredPodInfo)
+	case CostPodMemoryRequest:
+		item := fmt.Sprintf("%s * %s", QueryCostPodMemoryRequest, QueryFilteredPodInfo)
 		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, resolutionSecs, kubePodLabelStr, kubePodInfoStr))
 	case CostTotal:
 		item := fmt.Sprintf("%s", QueryCostTotal)

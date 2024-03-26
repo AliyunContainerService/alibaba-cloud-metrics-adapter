@@ -84,8 +84,8 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 	cm.applyMetricToPodMap(window, CPUCoreUsageAverage, metricSelector, podMap)
 	cm.applyMetricToPodMap(window, MemoryRequestAverage, metricSelector, podMap)
 	cm.applyMetricToPodMap(window, MemoryUsageAverage, metricSelector, podMap)
-	cm.applyMetricToPodMap(window, CostCPURequest, metricSelector, podMap)
-	cm.applyMetricToPodMap(window, CostMemoryRequest, metricSelector, podMap)
+	cm.applyMetricToPodMap(window, CostPodCPURequest, metricSelector, podMap)
+	cm.applyMetricToPodMap(window, CostPodMemoryRequest, metricSelector, podMap)
 	cm.applyMetricToPodMap(window, CostCustom, metricSelector, podMap)
 
 	weightCPU, weightRAM := getCostWeights()
@@ -169,9 +169,9 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 			podMap[key].Allocations.RAMBytesRequestAverage = float64(value.Value.MilliValue()) / 1000
 		case MemoryUsageAverage:
 			podMap[key].Allocations.RAMBytesUsageAverage = float64(value.Value.MilliValue()) / 1000
-		case CostCPURequest:
+		case CostPodCPURequest:
 			podMap[key].CostMeta.CostCPURequest = float64(value.Value.MilliValue()) / 1000
-		case CostMemoryRequest:
+		case CostPodMemoryRequest:
 			podMap[key].CostMeta.CostRAMRequest = float64(value.Value.MilliValue()) / 1000
 		case CostCustom:
 			podMap[key].Allocations.CustomCost = float64(value.Value.MilliValue()) / 1000
