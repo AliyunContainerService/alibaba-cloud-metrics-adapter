@@ -195,8 +195,9 @@ func parseWindow(window string, now time.Time) (Window, error) {
 		// 00:00 today, accounting for timezone offset
 		start = start.Truncate(time.Hour * 24)
 		start = start.Add(offset)
-		// 00:00 Sunday of the current week
-		start = start.Add(-24 * time.Hour * time.Duration(start.Weekday()))
+		// 00:00 Monday of the current week
+		daysSinceMonday := (int(start.Weekday()) + 6) % 7
+		start = start.Add(-24 * time.Hour * time.Duration(daysSinceMonday))
 
 		end := now
 
@@ -209,8 +210,9 @@ func parseWindow(window string, now time.Time) (Window, error) {
 		// 00:00 today, accounting for timezone offset
 		start = start.Truncate(time.Hour * 24)
 		start = start.Add(offset)
-		// 00:00 Sunday of last week
-		start = start.Add(-24 * time.Hour * time.Duration(start.Weekday()+7))
+		// 00:00 Monday of last week
+		daysSinceMonday := (int(start.Weekday()) + 6) % 7
+		start = start.Add(-24 * time.Hour * time.Duration(daysSinceMonday+7))
 
 		end := start.Add(7 * 24 * time.Hour)
 
