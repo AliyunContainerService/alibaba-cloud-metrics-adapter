@@ -114,7 +114,6 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 			}
 		}
 
-		pod.Allocations.CostRatio = math.Round(pod.Allocations.CostRatio*1000) / 1000
 		pod.Allocations.Cost = math.Round(pod.Allocations.Cost*1000) / 1000
 
 		allocSet.Set(pod.Allocations)
