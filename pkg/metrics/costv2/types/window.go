@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	util "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/util"
+	"k8s.io/klog/v2"
 	"math"
 	"regexp"
 	"strconv"
@@ -152,7 +153,10 @@ func (w Window) GetLabelSelectorStr() string {
 	end := *w.End()
 	startStr := start.Format(WindowLayout)
 	endStr := end.Format(WindowLayout)
-	return fmt.Sprintf("window_start=%s,window_end=%s,window_layout=%s", startStr, endStr, WindowLayout)
+
+	selector := fmt.Sprintf("window_start=%s,window_end=%s,window_layout=%s", startStr, endStr, WindowLayout)
+	klog.Infof("get window label selector str: %s", selector)
+	return selector
 }
 
 // parseWindow generalizes the parsing of window strings, relative to a given

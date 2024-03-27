@@ -69,9 +69,12 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 	allocSet := types.NewAllocationSet()
 	podMap := map[types.PodMeta]*types.Pod{}
 
-	selectorStr := []string{
-		window.GetLabelSelectorStr(),
-		filter.GetLabelSelectorStr(),
+	selectorStr := make([]string, 0)
+	if window.GetLabelSelectorStr() != "" {
+		selectorStr = append(selectorStr, window.GetLabelSelectorStr())
+	}
+	if filter.GetLabelSelectorStr() != "" {
+		selectorStr = append(selectorStr, filter.GetLabelSelectorStr())
 	}
 
 	metricSelector, err := labels.Parse(strings.Join(selectorStr, ","))

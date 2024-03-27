@@ -66,7 +66,7 @@ func (f *Filter) GetLabelSelectorStr() string {
 	}
 
 	selector := labels.NewSelector().Add(requirements...).String()
-
+	klog.Infof("get filter label selector str: %s", selector)
 	return selector
 }
 
