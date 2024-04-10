@@ -72,7 +72,7 @@ func (l *periodicMetricLister) updateMetrics() error {
 
 	//Cache the result.
 	l.mostRecentResult = result
-	klog.Infof("periodic fetch metrics from prometheus %v for external metrics", result)
+	klog.V(6).Infof("periodic fetch metrics from prometheus %v for external metrics", result)
 	//Let our listeners know we've got new data ready for them.
 	l.notifyListeners()
 	return nil
