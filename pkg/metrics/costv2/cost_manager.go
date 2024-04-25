@@ -204,7 +204,7 @@ func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, 
 
 	// Validate window is legal
 	if window.IsOpen() || window.IsNegative() {
-		return nil, fmt.Errorf("bad request - illegal window: %s", window)
+		return nil, fmt.Errorf("bad request - illegal window: %v", window)
 	}
 
 	// Begin with empty response
@@ -217,7 +217,7 @@ func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, 
 	for window.End().After(stepStart) {
 		allocSet, err := cm.ComputeAllocation(apiType, stepStart, stepEnd, resolution, filter, costType)
 		if err != nil {
-			return nil, fmt.Errorf("error computing allocations for %s: %w", types.NewClosedWindow(stepStart, stepEnd), err)
+			return nil, fmt.Errorf("error computing allocations for %v: %w", types.NewClosedWindow(stepStart, stepEnd), err)
 		}
 
 		asr.Append(allocSet)
@@ -232,7 +232,7 @@ func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, 
 	// todo Aggregate
 	err := asr.AggregateBy(aggregate)
 	if err != nil {
-		return nil, fmt.Errorf("error aggregating for %s: %w", window, err)
+		return nil, fmt.Errorf("error aggregating for %v: %w", window, err)
 	}
 
 	// Accumulate, if requested
