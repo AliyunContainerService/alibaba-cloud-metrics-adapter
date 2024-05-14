@@ -165,7 +165,7 @@ github.com/pierrec/lz4/internal/xxh32
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
-# github.com/prometheus/client_golang v1.11.0
+# github.com/prometheus/client_golang v1.11.1
 github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/internal
 github.com/prometheus/client_golang/prometheus/promhttp
@@ -919,13 +919,6 @@ k8s.io/metrics/pkg/apis/custom_metrics/v1beta2
 k8s.io/metrics/pkg/apis/external_metrics
 k8s.io/metrics/pkg/apis/external_metrics/install
 k8s.io/metrics/pkg/apis/external_metrics/v1beta1
-k8s.io/metrics/pkg/apis/metrics
-k8s.io/metrics/pkg/apis/metrics/v1alpha1
-k8s.io/metrics/pkg/apis/metrics/v1beta1
-k8s.io/metrics/pkg/client/clientset/versioned
-k8s.io/metrics/pkg/client/clientset/versioned/scheme
-k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1alpha1
-k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1
 k8s.io/metrics/pkg/client/external_metrics
 # k8s.io/utils v0.0.0-20210802155522-efc7438f0176
 k8s.io/utils/buffer

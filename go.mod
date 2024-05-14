@@ -8,7 +8,7 @@ require (
 	github.com/denverdino/aliyungo v0.0.0-20200609114633-3b95b3216337
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.15.0
-	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/client_golang v1.11.1
 	github.com/prometheus/common v0.26.0
 	github.com/smartystreets/assertions v1.0.1 // indirect
 	github.com/stretchr/testify v1.7.0
