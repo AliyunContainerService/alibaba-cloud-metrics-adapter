@@ -72,7 +72,20 @@ func (l *periodicMetricLister) updateMetrics() error {
 
 	//Cache the result.
 	l.mostRecentResult = result
-	klog.V(6).Infof("periodic fetch metrics from prometheus %v for external metrics", result)
+	dataNum := 0
+	if result.series != nil {
+		for _, series := range result.series {
+			if series != nil {
+				if n := len(series); n >= 1 {
+					klog.Infof("metrics name: %v, periodic fetch %d data from prometheus", series[0].Name, n)
+					dataNum += n
+				}
+			}
+		}
+	}
+
+	klog.Infof("periodic fetch %d data from prometheus for external metrics", dataNum)
+	klog.V(7).Infof("periodic fetch metrics from prometheus %v for external metrics", result)
 	//Let our listeners know we've got new data ready for them.
 	l.notifyListeners()
 	return nil
