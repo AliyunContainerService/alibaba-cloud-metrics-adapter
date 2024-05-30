@@ -36,6 +36,7 @@ type PodMetrics struct {
 	PerCorePricing float64 `json:"perCorePricing"`
 	CostRatio      float64 `json:"costRatio"`
 	Cost           float64 `json:"cost"`
+	CustomCost     float64 `json:"customCost"`
 	//StartTime      int64 `json:"startTime"`
 	//EndTime        int   `json:"endTime"`
 }
@@ -114,6 +115,8 @@ func (co *CostOptions) convertPodCostMap(metricsName string, podMetricsMap map[s
 		case COST_HOUR, COST_DAY, COST_WEEK, COST_MONTH:
 			singlePodMetrics.Cost = float64(value.Value.MilliValue()) / 1000
 			singlePodMetrics.CostRatio = float64(value.Value.MilliValue()) / float64(CostTotal.Value.MilliValue())
+		case COST_CUSTOM_HOUR, COST_CUSTOM_DAY, COST_CUSTOM_WEEK, COST_CUSTOM_MONTH:
+			singlePodMetrics.CustomCost = float64(value.Value.MilliValue()) / 1000
 		}
 	}
 	return podMetricsMap
@@ -144,6 +147,9 @@ func (co *CostOptions) convertCostSummaryMap(metricName string, podMetric PodMet
 		podMetric.Metadata.TimeUnit = co.TimeUnit
 		podMetric.Metadata.DimensionType = co.DimensionType
 		podMetric.Metadata.Dimension = co.Dimension
+	case COST_CUSTOM_HOUR, COST_CUSTOM_DAY, COST_CUSTOM_WEEK, COST_CUSTOM_MONTH:
+		podMetric.CustomCost = float64(metric.Value.MilliValue()) / 1000
+
 	}
 	return podMetric
 }
@@ -266,6 +272,7 @@ func (co *CostOptions) getCostMetrics(params map[string]string) (podMetricsList 
 	metricList := []string{"cost_cpu_request", "cost_cpu_limit", "cost_memory_request", "cost_memory_limit", "cost_memory_usage", "cost_cpu_usage", "cost_percorepricing"}
 	metricList = append(metricList, fmt.Sprintf("cost_total_%s", co.TimeUnit))
 	metricList = append(metricList, fmt.Sprintf("cost_%s", co.TimeUnit))
+	metricList = append(metricList, fmt.Sprintf("cost_custom_%s", co.TimeUnit))
 	if co.Summary == true {
 		podMetricsList = co.DescribeCostSummary(namespace, labelMatch, metricList)
 	} else {

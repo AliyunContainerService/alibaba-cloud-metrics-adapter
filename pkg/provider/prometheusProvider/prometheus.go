@@ -46,6 +46,8 @@ type AlibabaMetricsAdapterOptions struct {
 	MetricsMaxAge time.Duration
 
 	MetricsConfig *cfg.MetricsDiscoveryConfig
+
+	CostWeights string
 }
 
 func (cmd *AlibabaMetricsAdapterOptions) AddFlags() {
@@ -70,6 +72,8 @@ func (cmd *AlibabaMetricsAdapterOptions) AddFlags() {
 		"interval at which to re-list the set of all available metrics from Prometheus")
 	cmd.Flags().DurationVar(&cmd.MetricsMaxAge, "metrics-max-age", cmd.MetricsMaxAge, ""+
 		"period for which to query the set of available metrics from Prometheus")
+	cmd.Flags().StringVar(&cmd.CostWeights, "cost-weights", `{"cpu": "1.0", "memory": "0.0", "gpu": "0.0"}`,
+		"Resource weights used to calculate pod costs")
 }
 
 func (cmd *AlibabaMetricsAdapterOptions) LoadConfig() error {

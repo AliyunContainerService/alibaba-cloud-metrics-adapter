@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/cost"
+	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
 	"k8s.io/component-base/logs"
@@ -42,6 +43,8 @@ func main() {
 	})
 	// export cost metrics api
 	http.HandleFunc("/cost", cost.Handler)
+	http.HandleFunc("/v2/cost", costv2.ComputeEstimatedCostHandler)
+	http.HandleFunc("/v2/allocation", costv2.ComputeAllocationHandler)
 	go func() {
 		http.ListenAndServe(":8080", nil)
 	}()
