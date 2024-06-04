@@ -1,12 +1,14 @@
 package costv2
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	types "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/types"
 	util "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/util"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
 	"io"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -145,6 +147,24 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 
 		// init podMap metadata
 		if _, ok := podMap[key]; !ok {
+			controllerKind := strings.ToLower(value.MetricLabels["created_by_kind"])
+			controller := strings.ToLower(value.MetricLabels["created_by_name"])
+
+			if controllerKind == "replicaset" {
+				replicaSet, err := cm.client.AppsV1().ReplicaSets(namespace).Get(context.TODO(), controller, metav1.GetOptions{})
+				if err != nil {
+					klog.Errorf("failed to get ReplicaSet meta: %s, error: %v", controller, err)
+				}
+
+				ownerRefs := replicaSet.OwnerReferences
+				if len(ownerRefs) > 0 {
+					controllerKind = strings.ToLower(ownerRefs[0].Kind)
+					controller = ownerRefs[0].Name
+				} else {
+					klog.Errorf("No owner references found for ReplicaSet: %s", controller)
+				}
+			}
+
 			podMap[key] = &types.Pod{
 				Key: key,
 				Allocations: &types.Allocation{
@@ -152,8 +172,8 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 					Start: *window.Start(),
 					End:   *window.End(),
 					Properties: &types.AllocationProperties{
-						Controller:     value.MetricLabels["created_by_name"],
-						ControllerKind: value.MetricLabels["created_by_kind"],
+						Controller:     controller,
+						ControllerKind: controllerKind,
 						Pod:            pod,
 						Namespace:      namespace,
 					},
@@ -199,7 +219,7 @@ func getCostWeights() (cpu, memory float64) {
 	return costWeights.CPU, costWeights.Memory
 }
 
-func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, resolution, step time.Duration, aggregate []string, filter *types.Filter, format string, accumulateBy AccumulateOption, costType types.CostType) (*types.AllocationSetRange, error) {
+func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, resolution, step time.Duration, aggregate string, filter *types.Filter, format string, accumulateBy AccumulateOption, costType types.CostType) (*types.AllocationSetRange, error) {
 	klog.Infof("get range allocation params: apiType: %s, window: %s, resolution: %s, step: %s, aggregate: %s, filter: %s, format: %s, accumulateBy: %s, costType: %s", apiType, window, resolution, step, aggregate, filter, format, accumulateBy, costType)
 
 	// Validate window is legal
@@ -229,10 +249,8 @@ func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, 
 		}
 	}
 
-	// todo Aggregate
-	err := asr.AggregateBy(aggregate)
-	if err != nil {
-		return nil, fmt.Errorf("error aggregating for %v: %w", window, err)
+	if err := asr.AggregateBy(aggregate); err != nil {
+		return nil, fmt.Errorf("error aggregating allocations: %w", err)
 	}
 
 	// Accumulate, if requested
@@ -302,7 +320,10 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// todo: parse other params
-	aggregate := make([]string, 0)
+	aggregate := ""
+	if aggregateStr, ok := paramsMap["aggregate"]; ok {
+		aggregate = aggregateStr
+	}
 	resolution := time.Duration(0)
 
 	cm := NewCostManager()
@@ -355,7 +376,10 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// todo: parse other params
-	aggregate := make([]string, 0)
+	aggregate := ""
+	if aggregateStr, ok := paramsMap["aggregate"]; ok {
+		aggregate = aggregateStr
+	}
 	resolution := time.Duration(0)
 
 	cm := NewCostManager()

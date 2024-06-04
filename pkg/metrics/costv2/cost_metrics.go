@@ -32,7 +32,7 @@ const (
 	BillingPretaxGrossAmountTotal = "billing_pretax_gross_amount_total"
 
 	// PromQL
-	QueryFilteredPodInfo               = `max_over_time((max(kube_pod_labels{%s}) by (pod,namespace) * on(pod, namespace) group_right kube_pod_info{%s})[%s])`
+	QueryFilteredPodInfo               = `on(pod, namespace) group_right max_over_time((max(kube_pod_labels{job="_kube-state-metrics"%s}) by (pod,namespace) * max(kube_pod_status_phase{phase=~"Running", job="_kube-state-metrics"}) by (pod,namespace) * on(pod, namespace) group_right kube_pod_info{job="_kube-state-metrics"%s})[%s])`
 	QueryCPUCoreRequestAverage         = `sum(avg_over_time((max(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="cpu"}) by (pod,namespace,container))[%s])) by (namespace, pod)`
 	QueryCPUCoreUsageAverage           = `sum(avg_over_time(rate(container_cpu_usage_seconds_total[1m])[%s])) by(namespace, pod)`
 	QueryMemoryRequestAverage          = `sum(avg_over_time((max(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="memory"}) by (pod,namespace,container))[%s])) by (namespace, pod)`
@@ -175,13 +175,14 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 		// only support single label currently
 		// todo: check promql special symbol conversion, eg. "label_a/b" -> "label_a_b"
 		if strings.HasPrefix(key, "label_") {
-			kubePodLabelStr = fmt.Sprintf(`%s=~"%s"`, key, value[0])
+			kubePodLabelStr = fmt.Sprintf(`,%s=~"%s"`, key, value[0])
 		}
 	}
 
 	// build str for kube_pod_info
 	//kubePodInfoStr := fmt.Sprintf(`namespace=~"%s",created_by_kind=~"%s",created_by_name=~"%s",pod=~"%s"`,
 	//	parsePromLabel(requirementMap["namespace"]), parsePromLabel(requirementMap["created_by_kind"]), parsePromLabel(requirementMap["created_by_name"]), parsePromLabel(requirementMap["pod"]))
+	kubePodInfoStr := ""
 	kubePodInfoStrList := make([]string, 0)
 	if list, ok := requirementMap["namespace"]; ok {
 		kubePodInfoStrList = append(kubePodInfoStrList, fmt.Sprintf(`namespace=~"%s"`, strings.Join(list, "|")))
@@ -195,7 +196,9 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 	if list, ok := requirementMap["created_by_name"]; ok {
 		kubePodInfoStrList = append(kubePodInfoStrList, fmt.Sprintf(`created_by_name=~"%s"`, strings.Join(list, "|")))
 	}
-	kubePodInfoStr := strings.Join(kubePodInfoStrList, ",")
+	if len(kubePodInfoStrList) > 0 {
+		kubePodInfoStr = fmt.Sprintf(",%s", strings.Join(kubePodInfoStrList, ","))
+	}
 
 	// build str for prom duration
 	layout := requirementMap["window_layout"][0]

@@ -1,6 +1,7 @@
 package costv2
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -38,11 +39,6 @@ type AllocationProperties struct {
 	Labels         map[string]string `json:"labels,omitempty"`
 }
 
-//	type AllocationSet struct {
-//		Allocations map[string]*Allocation `json:"allocations"`
-//		Window      Window                 `json:"window"`
-//		Type        string
-//	}
 type AllocationSet map[string]*Allocation
 
 // NewAllocationSet instantiates a new AllocationSet
@@ -73,8 +69,55 @@ func (as *AllocationSet) Set(alloc *Allocation) error {
 	return nil
 }
 
-func (as *AllocationSet) AggregateBy(aggregateBy []string) error {
-	return nil
+func (as *AllocationSet) AggregateBy(aggregateBy string) (*AllocationSet, error) {
+	if as.IsEmpty() {
+		return nil, nil
+	}
+
+	if aggregateBy == "" {
+		return as, nil
+	}
+
+	aggSet := make(AllocationSet)
+
+	for _, alloc := range *as {
+		aggregateKey := ""
+		switch aggregateBy {
+		case "namespace":
+			aggregateKey = alloc.Properties.Namespace
+		case "controller":
+			aggregateKey = fmt.Sprintf("%s:%s", alloc.Properties.ControllerKind, alloc.Properties.Controller)
+		case "controllerKind":
+			aggregateKey = alloc.Properties.ControllerKind
+		default:
+			return nil, fmt.Errorf("invalid 'aggregate' parameter: %s", aggregateBy)
+		}
+
+		if v, ok := aggSet[aggregateKey]; !ok {
+			aggSet[aggregateKey] = &Allocation{
+				Name:                   aggregateKey,
+				Start:                  alloc.Start,
+				End:                    alloc.End,
+				CPUCoreRequestAverage:  alloc.CPUCoreRequestAverage,
+				CPUCoreUsageAverage:    alloc.CPUCoreUsageAverage,
+				RAMBytesRequestAverage: alloc.RAMBytesRequestAverage,
+				RAMBytesUsageAverage:   alloc.RAMBytesUsageAverage,
+				Cost:                   alloc.Cost,
+				CostRatio:              alloc.CostRatio,
+				CustomCost:             alloc.CustomCost,
+			}
+		} else {
+			v.CPUCoreRequestAverage += alloc.CPUCoreRequestAverage
+			v.CPUCoreUsageAverage += alloc.CPUCoreUsageAverage
+			v.RAMBytesRequestAverage += alloc.RAMBytesRequestAverage
+			v.RAMBytesUsageAverage += alloc.RAMBytesUsageAverage
+			v.Cost += alloc.Cost
+			v.CostRatio += alloc.CostRatio
+			v.CustomCost += alloc.CustomCost
+		}
+	}
+
+	return &aggSet, nil
 }
 
 type AllocationSetRange struct {
@@ -91,7 +134,18 @@ func NewAllocationSetRange(allocs ...*AllocationSet) *AllocationSetRange {
 
 // AggregateBy aggregates each AllocationSet in the range by the given
 // properties and options.
-func (asr *AllocationSetRange) AggregateBy(aggregateBy []string) error {
+func (asr *AllocationSetRange) AggregateBy(aggregateBy string) error {
+	asList := make([]*AllocationSet, 0)
+
+	for _, as := range asr.Allocations {
+		newAs, err := as.AggregateBy(aggregateBy)
+		if err != nil {
+			return err
+		}
+		asList = append(asList, newAs)
+	}
+
+	asr.Allocations = asList
 	return nil
 }
 
