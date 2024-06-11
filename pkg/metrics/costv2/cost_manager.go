@@ -2,6 +2,7 @@ package costv2
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	types "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/types"
@@ -338,9 +339,52 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("content-type", "application/json")
-	p, _ := json.Marshal(asr)
-	io.WriteString(w, string(p))
+	format := ""
+	if formatStr, ok := paramsMap["format"]; ok {
+		format = formatStr
+	}
+	switch format {
+	case "json", "":
+		w.Header().Set("content-type", "application/json")
+		p, _ := json.Marshal(asr)
+		io.WriteString(w, string(p))
+	case "csv":
+		filename := "allocation.csv"
+
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+		csvWriter := csv.NewWriter(w)
+		defer csvWriter.Flush()
+
+		var dimension string
+		if aggregate == "" {
+			dimension = "Pod"
+		} else {
+			dimension = strings.ToTitle(aggregate)
+		}
+		if err := csvWriter.Write([]string{dimension, "Window", "Cost", "CostRatio"}); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to write csv: %s", err), http.StatusInternalServerError)
+			return
+		}
+
+		for _, as := range asr.Allocations {
+			for _, a := range *as {
+				record := []string{
+					a.Name,
+					a.Start.Format(time.RFC3339),
+					a.End.Format(time.RFC3339),
+					fmt.Sprintf("%f", a.Cost),
+					fmt.Sprintf("%f", a.CostRatio),
+				}
+
+				if err := csvWriter.Write(record); err != nil {
+					http.Error(w, fmt.Sprintf("Failed to write csv %s: %s", record, err), http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+
+	}
 }
 
 func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
@@ -394,9 +438,51 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("content-type", "application/json")
-	p, _ := json.Marshal(asr)
-	io.WriteString(w, string(p))
+	format := ""
+	if formatStr, ok := paramsMap["format"]; ok {
+		format = formatStr
+	}
+	switch format {
+	case "json", "":
+		w.Header().Set("content-type", "application/json")
+		p, _ := json.Marshal(asr)
+		io.WriteString(w, string(p))
+	case "csv":
+		filename := "cost.csv"
+
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+		csvWriter := csv.NewWriter(w)
+		defer csvWriter.Flush()
+
+		var dimension string
+		if aggregate == "" {
+			dimension = "Pod"
+		} else {
+			dimension = strings.ToTitle(aggregate)
+		}
+		if err := csvWriter.Write([]string{dimension, "Window", "Cost", "CostRatio"}); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to write csv: %s", err), http.StatusInternalServerError)
+			return
+		}
+
+		for _, as := range asr.Allocations {
+			for _, a := range *as {
+				record := []string{
+					a.Name,
+					a.Start.Format(time.RFC3339),
+					a.End.Format(time.RFC3339),
+					fmt.Sprintf("%f", a.Cost),
+					fmt.Sprintf("%f", a.CostRatio),
+				}
+
+				if err := csvWriter.Write(record); err != nil {
+					http.Error(w, fmt.Sprintf("Failed to write csv %s: %s", record, err), http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+	}
 }
 
 type Error struct {
