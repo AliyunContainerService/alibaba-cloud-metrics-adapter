@@ -76,6 +76,7 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 	if window.GetLabelSelectorStr() != "" {
 		selectorStr = append(selectorStr, window.GetLabelSelectorStr())
 	}
+	filter = cm.preprocessFilter(filter)
 	if filter.GetLabelSelectorStr() != "" {
 		selectorStr = append(selectorStr, filter.GetLabelSelectorStr())
 	}
@@ -512,6 +513,50 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// preprocessFilter preprocess filter for deployment -> replicaSet
+func (cm *CostManager) preprocessFilter(filter *types.Filter) *types.Filter {
+	if filter == nil {
+		return filter
+	}
+
+	if filter.ControllerName != nil {
+		newControllerName := make([]string, 0)
+		for _, controller := range filter.ControllerName {
+			deployments, err := cm.client.AppsV1().Deployments("").List(context.TODO(), metav1.ListOptions{
+				FieldSelector: "metadata.name=" + controller,
+			})
+			if err != nil {
+				klog.Errorf("Failed to list deployments for %s: %s", controller, err)
+			}
+
+			if len(deployments.Items) == 0 {
+				newControllerName = append(newControllerName, controller)
+				continue
+			}
+
+			for _, deployment := range deployments.Items {
+				replicaSets, err := cm.client.AppsV1().ReplicaSets(deployment.Namespace).List(context.TODO(), metav1.ListOptions{
+					LabelSelector: metav1.FormatLabelSelector(deployment.Spec.Selector),
+				})
+				if err != nil {
+					klog.Errorf("Failed to list replicaSets for %s: %s", controller, err)
+				}
+
+				for _, rs := range replicaSets.Items {
+					for _, ownerRef := range rs.OwnerReferences {
+						if *ownerRef.Controller && ownerRef.UID == deployment.UID {
+							newControllerName = append(newControllerName, rs.Name)
+						}
+					}
+				}
+			}
+		}
+		filter.ControllerName = newControllerName
+	}
+
+	return filter
 }
 
 type Error struct {
