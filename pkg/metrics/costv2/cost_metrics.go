@@ -14,6 +14,7 @@ import (
 	"k8s.io/metrics/pkg/apis/external_metrics"
 	p "sigs.k8s.io/custom-metrics-apiserver/pkg/provider"
 	prom "sigs.k8s.io/prometheus-adapter/pkg/client"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -32,17 +33,21 @@ const (
 	BillingPretaxGrossAmountTotal = "billing_pretax_gross_amount_total"
 
 	// PromQL
-	QueryFilteredPodInfo               = `on(pod, namespace) group_right max_over_time((max(kube_pod_labels{job="_kube-state-metrics"%s}) by (pod,namespace) * max(kube_pod_status_phase{phase=~"Running", job="_kube-state-metrics"}) by (pod,namespace) * on(pod, namespace) group_right kube_pod_info{job="_kube-state-metrics"%s})[%s])`
 	QueryCPUCoreRequestAverage         = `sum(avg_over_time((max(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="cpu"}) by (pod,namespace,container))[%s])) by (namespace, pod)`
 	QueryCPUCoreUsageAverage           = `sum(avg_over_time(rate(container_cpu_usage_seconds_total[1m])[%s])) by(namespace, pod)`
 	QueryMemoryRequestAverage          = `sum(avg_over_time((max(kube_pod_container_resource_requests{job="_kube-state-metrics", resource="memory"}) by (pod,namespace,container))[%s])) by (namespace, pod)`
 	QueryMemoryUsageAverage            = `sum(avg_over_time(container_memory_working_set_bytes[%s])) by(namespace, pod)`
-	QueryCostPodCPURequest             = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="cpu"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="cpu"})[%s])) by (namespace, pod) * %s`
-	QueryCostPodMemoryRequest          = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="memory"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="memory"})[%s])) by (namespace, pod) * %s`
+	QueryCostPodCPURequest             = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="cpu"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="cpu"} * on(pod, namespace) group_left max(kube_pod_status_phase{phase=~"Running", job="_kube-state-metrics"}) by (pod,namespace))[%s])) by (namespace, pod) * %s`
+	QueryCostPodMemoryRequest          = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left kube_node_status_capacity{job="_kube-state-metrics",resource="memory"} * on(node) group_right kube_pod_container_resource_requests{job="_kube-state-metrics",resource="memory"} * on(pod, namespace) group_left max(kube_pod_status_phase{phase=~"Running", job="_kube-state-metrics"}) by (pod,namespace))[%s])) by (namespace, pod) * %s`
 	QueryCostTotal                     = `sum(sum_over_time((max(node_current_price) by (node))[%s])) * %s`
 	QueryCostCustom                    = `sum_over_time((max(label_replace(label_replace(pod_custom_price, "namespace", "$1", "exported_namespace", "(.*)"), "pod", "$1", "exported_pod", "(.*)")) by (namespace,pod))[%s]) * %s`
 	QueryBillingPretaxAmountTotal      = `sum(sum_over_time(max(pretax_amount) by (product_code, instance_id)[%s]))`
 	QueryBillingPretaxGrossAmountTotal = `sum(sum_over_time(max(pretax_gross_amount) by (product_code, instance_id)[%s]))`
+
+	// QueryFilteredPodInfo is the Pod Filter
+	// `max(kube_pod_labels{job="_kube-state-metrics"%s}) by (pod,namespace)`, value is 1, used to filter pods with specified labels.
+	// `kube_pod_info{job="_kube-state-metrics"%s}`, value is 1, used to filter pods with specified name, controller or controller name.
+	QueryFilteredPodInfo = `on(pod, namespace) group_right max_over_time((max(kube_pod_labels{job="_kube-state-metrics"%s}) by (pod,namespace) * on(pod, namespace) group_right kube_pod_info{job="_kube-state-metrics"%s})[%s])`
 )
 
 type COSTV2MetricSource struct {
@@ -214,6 +219,15 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 	}
 	duration := end.Sub(start)
 	resolutionStr, resolutionSecs := util.ResolutionStringAndSeconds(duration)
+	if res, ok := requirementMap["resolution"]; ok {
+		resolutionDur, err := util.ParseDuration(res[0])
+		if err != nil {
+			klog.Errorf("Error parsing resolution to duration, resolution: %s, error: %v", resolutionStr, err)
+		} else {
+			resolutionStr = res[0]
+			resolutionSecs = strconv.FormatFloat(resolutionDur.Seconds(), 'f', -1, 64)
+		}
+	}
 	durStr := fmt.Sprintf("%s:%s", util.DurationString(duration), resolutionStr)
 
 	switch metricName {

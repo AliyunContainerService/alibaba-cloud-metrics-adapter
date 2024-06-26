@@ -3,6 +3,7 @@ package costv2
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -315,4 +316,14 @@ func leadingFraction(s string) (x int64, scale float64, rem string) {
 		scale *= 10
 	}
 	return x, scale, s[i:]
+}
+
+// IsValidDurationString matches strings with a number followed by a single valid unit character: w, d, h, m, or s
+func IsValidDurationString(s string) (bool, error) {
+	pattern := `^\d+[wdhms]$`
+	matched, err := regexp.MatchString(pattern, s)
+	if err != nil {
+		return false, fmt.Errorf("regex match error: %v", err)
+	}
+	return matched, nil
 }

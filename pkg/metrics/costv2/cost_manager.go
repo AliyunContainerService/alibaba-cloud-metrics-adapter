@@ -65,7 +65,7 @@ func (cm *CostManager) getExternalMetrics(namespace, metricName string, metricSe
 	return metrics
 }
 
-func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, resolution time.Duration, filter *types.Filter, costType types.CostType) (*types.AllocationSet, error) {
+func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, resolution string, filter *types.Filter, costType types.CostType) (*types.AllocationSet, error) {
 	klog.V(4).Infof("compute allocation params: apiType: %v, start: %v, end: %v, resolution: %v, filter: %v, costTpe: %v", apiType, start, end, resolution, filter, costType)
 
 	window := types.NewWindow(&start, &end)
@@ -78,6 +78,9 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 	}
 	if filter.GetLabelSelectorStr() != "" {
 		selectorStr = append(selectorStr, filter.GetLabelSelectorStr())
+	}
+	if resolution != "" {
+		selectorStr = append(selectorStr, fmt.Sprintf("resolution=%s", resolution))
 	}
 
 	metricSelector, err := labels.Parse(strings.Join(selectorStr, ","))
@@ -220,7 +223,7 @@ func getCostWeights() (cpu, memory float64) {
 	return costWeights.CPU, costWeights.Memory
 }
 
-func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, resolution, step time.Duration, aggregate string, filter *types.Filter, format string, accumulateBy AccumulateOption, costType types.CostType) (*types.AllocationSetRange, error) {
+func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, resolution string, step time.Duration, aggregate string, filter *types.Filter, format string, accumulateBy AccumulateOption, costType types.CostType) (*types.AllocationSetRange, error) {
 	klog.Infof("get range allocation params: apiType: %s, window: %s, resolution: %s, step: %s, aggregate: %s, filter: %s, format: %s, accumulateBy: %s, costType: %s", apiType, window, resolution, step, aggregate, filter, format, accumulateBy, costType)
 
 	// Validate window is legal
@@ -293,7 +296,7 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if window.Duration() < time.Hour*24 {
-		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", fmt.Errorf("window duration should be at least 1 day")), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("Invalid 'window' parameter %s: %s", paramsMap["window"], fmt.Errorf("window duration should be at least 1 day")), http.StatusBadRequest)
 		return
 	}
 
@@ -301,7 +304,7 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	if filterStr, ok := paramsMap["filter"]; ok {
 		filter, err = types.ParseFilter(filterStr)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Invalid 'filter' parameter: %s", err), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("Invalid 'filter' parameter %s: %s", paramsMap["filter"], err), http.StatusBadRequest)
 			return
 		}
 	}
@@ -310,7 +313,7 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	if stepStr, ok := paramsMap["step"]; ok {
 		step, err = util.ParseDuration(stepStr)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Invalid 'step' parameter: %s", err), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("Invalid 'step' parameter %s: %s", paramsMap["step"], err), http.StatusBadRequest)
 			return
 		}
 	}
@@ -325,7 +328,20 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	if aggregateStr, ok := paramsMap["aggregate"]; ok {
 		aggregate = aggregateStr
 	}
-	resolution := time.Duration(0)
+
+	resolution := ""
+	if resolutionStr, ok := paramsMap["resolution"]; ok {
+		matched, err := util.IsValidDurationString(resolutionStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'resolution' parameter %s: %s", paramsMap["resolution"], err), http.StatusBadRequest)
+			return
+		}
+		if !matched {
+			http.Error(w, fmt.Sprintf("Invalid 'resolution' parameter %s: %s", paramsMap["resolution"], fmt.Errorf("resolution should be a valid duration string")), http.StatusBadRequest)
+			return
+		}
+		resolution = resolutionStr
+	}
 
 	cm := NewCostManager()
 	asr, err := cm.GetRangeAllocation(TypeAllocation, window, resolution, step, aggregate, filter, "", AccumulateOptionNone, types.AllocationPretaxAmount)
@@ -424,7 +440,20 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 	if aggregateStr, ok := paramsMap["aggregate"]; ok {
 		aggregate = aggregateStr
 	}
-	resolution := time.Duration(0)
+
+	resolution := ""
+	if resolutionStr, ok := paramsMap["resolution"]; ok {
+		matched, err := util.IsValidDurationString(resolutionStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'resolution' parameter %s: %s", paramsMap["resolution"], err), http.StatusBadRequest)
+			return
+		}
+		if !matched {
+			http.Error(w, fmt.Sprintf("Invalid 'resolution' parameter %s: %s", paramsMap["resolution"], fmt.Errorf("resolution should be a valid duration string")), http.StatusBadRequest)
+			return
+		}
+		resolution = resolutionStr
+	}
 
 	cm := NewCostManager()
 	asr, err := cm.GetRangeAllocation(TypeCost, window, resolution, step, aggregate, filter, "", AccumulateOptionNone, types.CostEstimated)
