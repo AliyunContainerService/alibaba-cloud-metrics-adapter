@@ -15,14 +15,25 @@ func TestParseFilter(t *testing.T) {
 	}{
 		{
 			name:      "Valid filter string",
-			filterStr: `namespace:"default","kube-system"+controllerName:"deployment","daemonset"+controllerKind:"deployment","daemonset"+pod:"qwqwqwqw","qdqd23124e!@!$$%#$%"+label[app+1q]:"nginx-/!@#+_)(webserver","ssd"`,
+			filterStr: `namespace:"default","kube-system"+controllerName:"deployment","daemonset"+controllerKind:"deployment","daemonset"+pod:"qwqwqwqw","qdqd23124e!@!$$%#$%"+label[app+1q]:"nginx-/!@#+_)(webserver"`,
 			//filterStr: `pod:"terway-eniip-rv8sf" namespace:"kube-system"`,
 			want: &Filter{
 				Namespace:      []string{"default", "kube-system"},
 				ControllerName: []string{"deployment", "daemonset"},
-				ControllerKind: []string{"deployment", "daemonset"},
+				ControllerKind: []string{"ReplicaSet", "DaemonSet"},
 				Pod:            []string{"qwqwqwqw", "qdqd23124e!@!$$%#$%"},
 				Label:          map[string][]string{"app+1q": []string{"nginx-/!@#+_)(webserver"}},
+			},
+			wantErr: false,
+		},
+		{
+			name:      "Valid filter string",
+			filterStr: `namespace:"default"+label[app]:"nginx"+controllerName:"nginx-deployment-basic123"`,
+			//filterStr: `pod:"terway-eniip-rv8sf" namespace:"kube-system"`,
+			want: &Filter{
+				Namespace:      []string{"default"},
+				ControllerName: []string{"nginx-deployment-basic123"},
+				Label:          map[string][]string{"app": []string{"nginx"}},
 			},
 			wantErr: false,
 		},

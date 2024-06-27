@@ -8,6 +8,8 @@ import (
 	types "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/types"
 	util "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/util"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"io"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -317,6 +319,10 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Invalid 'step' parameter %s: %s", paramsMap["step"], err), http.StatusBadRequest)
 			return
 		}
+		if step < time.Hour*24 {
+			http.Error(w, fmt.Sprintf("Invalid 'step' parameter %s: %s", stepStr, fmt.Errorf("step duration should be at least 1 day")), http.StatusBadRequest)
+			return
+		}
 	}
 
 	// todo: this param need to follow finops focus, now default is PretaxAmount
@@ -377,9 +383,10 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 		if aggregate == "" {
 			dimension = "Pod"
 		} else {
-			dimension = strings.ToTitle(aggregate)
+			caser := cases.Title(language.English)
+			dimension = caser.String(aggregate)
 		}
-		if err := csvWriter.Write([]string{dimension, "Window", "Cost", "CostRatio"}); err != nil {
+		if err := csvWriter.Write([]string{dimension, "Start", "End", "Cost", "CostRatio"}); err != nil {
 			http.Error(w, fmt.Sprintf("Failed to write csv: %s", err), http.StatusInternalServerError)
 			return
 		}
@@ -489,9 +496,10 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 		if aggregate == "" {
 			dimension = "Pod"
 		} else {
-			dimension = strings.ToTitle(aggregate)
+			caser := cases.Title(language.English)
+			dimension = caser.String(aggregate)
 		}
-		if err := csvWriter.Write([]string{dimension, "Window", "Cost", "CostRatio"}); err != nil {
+		if err := csvWriter.Write([]string{dimension, "Start", "End", "Cost", "CostRatio"}); err != nil {
 			http.Error(w, fmt.Sprintf("Failed to write csv: %s", err), http.StatusInternalServerError)
 			return
 		}
