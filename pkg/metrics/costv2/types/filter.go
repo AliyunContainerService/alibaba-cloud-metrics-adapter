@@ -132,5 +132,24 @@ func ParseFilter(filterStr string) (*Filter, error) {
 		}
 	}
 
+	if filter.ControllerKind != nil {
+		for i, kind := range filter.ControllerKind {
+			switch strings.ToLower(kind) {
+			case "deployment":
+				filter.ControllerKind[i] = "ReplicaSet"
+			case "daemonset":
+				filter.ControllerKind[i] = "DaemonSet"
+			case "statefulset":
+				filter.ControllerKind[i] = "StatefulSet"
+			case "job":
+				filter.ControllerKind[i] = "Job"
+			case "replicaset":
+				filter.ControllerKind[i] = "ReplicaSet"
+			default:
+				return nil, fmt.Errorf("unsupported controller kind: %s", kind)
+			}
+		}
+	}
+
 	return filter, nil
 }

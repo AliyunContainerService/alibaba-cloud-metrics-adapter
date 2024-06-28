@@ -1,12 +1,17 @@
 package costv2
 
 import (
+	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	types "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/types"
 	util "github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/metrics/costv2/util"
 	"github.com/AliyunContainerService/alibaba-cloud-metrics-adapter/pkg/provider/prometheusProvider"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"io"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -62,7 +67,7 @@ func (cm *CostManager) getExternalMetrics(namespace, metricName string, metricSe
 	return metrics
 }
 
-func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, resolution time.Duration, filter *types.Filter, costType types.CostType) (*types.AllocationSet, error) {
+func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, resolution string, filter *types.Filter, costType types.CostType) (*types.AllocationSet, error) {
 	klog.V(4).Infof("compute allocation params: apiType: %v, start: %v, end: %v, resolution: %v, filter: %v, costTpe: %v", apiType, start, end, resolution, filter, costType)
 
 	window := types.NewWindow(&start, &end)
@@ -73,8 +78,12 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 	if window.GetLabelSelectorStr() != "" {
 		selectorStr = append(selectorStr, window.GetLabelSelectorStr())
 	}
+	filter = cm.preprocessFilter(filter)
 	if filter.GetLabelSelectorStr() != "" {
 		selectorStr = append(selectorStr, filter.GetLabelSelectorStr())
+	}
+	if resolution != "" {
+		selectorStr = append(selectorStr, fmt.Sprintf("resolution=%s", resolution))
 	}
 
 	metricSelector, err := labels.Parse(strings.Join(selectorStr, ","))
@@ -145,6 +154,24 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 
 		// init podMap metadata
 		if _, ok := podMap[key]; !ok {
+			controllerKind := strings.ToLower(value.MetricLabels["created_by_kind"])
+			controller := strings.ToLower(value.MetricLabels["created_by_name"])
+
+			if controllerKind == "replicaset" {
+				replicaSet, err := cm.client.AppsV1().ReplicaSets(namespace).Get(context.TODO(), controller, metav1.GetOptions{})
+				if err != nil {
+					klog.Errorf("failed to get ReplicaSet meta: %s, error: %v", controller, err)
+				}
+
+				ownerRefs := replicaSet.OwnerReferences
+				if len(ownerRefs) > 0 {
+					controllerKind = strings.ToLower(ownerRefs[0].Kind)
+					controller = ownerRefs[0].Name
+				} else {
+					klog.Errorf("No owner references found for ReplicaSet: %s", controller)
+				}
+			}
+
 			podMap[key] = &types.Pod{
 				Key: key,
 				Allocations: &types.Allocation{
@@ -152,8 +179,8 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 					Start: *window.Start(),
 					End:   *window.End(),
 					Properties: &types.AllocationProperties{
-						Controller:     value.MetricLabels["created_by_name"],
-						ControllerKind: value.MetricLabels["created_by_kind"],
+						Controller:     controller,
+						ControllerKind: controllerKind,
 						Pod:            pod,
 						Namespace:      namespace,
 					},
@@ -199,7 +226,7 @@ func getCostWeights() (cpu, memory float64) {
 	return costWeights.CPU, costWeights.Memory
 }
 
-func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, resolution, step time.Duration, aggregate []string, filter *types.Filter, format string, accumulateBy AccumulateOption, costType types.CostType) (*types.AllocationSetRange, error) {
+func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, resolution string, step time.Duration, aggregate string, filter *types.Filter, format string, accumulateBy AccumulateOption, costType types.CostType) (*types.AllocationSetRange, error) {
 	klog.Infof("get range allocation params: apiType: %s, window: %s, resolution: %s, step: %s, aggregate: %s, filter: %s, format: %s, accumulateBy: %s, costType: %s", apiType, window, resolution, step, aggregate, filter, format, accumulateBy, costType)
 
 	// Validate window is legal
@@ -229,10 +256,8 @@ func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, 
 		}
 	}
 
-	// todo Aggregate
-	err := asr.AggregateBy(aggregate)
-	if err != nil {
-		return nil, fmt.Errorf("error aggregating for %v: %w", window, err)
+	if err := asr.AggregateBy(aggregate); err != nil {
+		return nil, fmt.Errorf("error aggregating allocations: %w", err)
 	}
 
 	// Accumulate, if requested
@@ -274,7 +299,7 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if window.Duration() < time.Hour*24 {
-		http.Error(w, fmt.Sprintf("Invalid 'window' parameter: %s", fmt.Errorf("window duration should be at least 1 day")), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("Invalid 'window' parameter %s: %s", paramsMap["window"], fmt.Errorf("window duration should be at least 1 day")), http.StatusBadRequest)
 		return
 	}
 
@@ -282,7 +307,7 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	if filterStr, ok := paramsMap["filter"]; ok {
 		filter, err = types.ParseFilter(filterStr)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Invalid 'filter' parameter: %s", err), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("Invalid 'filter' parameter %s: %s", paramsMap["filter"], err), http.StatusBadRequest)
 			return
 		}
 	}
@@ -291,7 +316,11 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	if stepStr, ok := paramsMap["step"]; ok {
 		step, err = util.ParseDuration(stepStr)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Invalid 'step' parameter: %s", err), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("Invalid 'step' parameter %s: %s", paramsMap["step"], err), http.StatusBadRequest)
+			return
+		}
+		if step < time.Hour*24 {
+			http.Error(w, fmt.Sprintf("Invalid 'step' parameter %s: %s", stepStr, fmt.Errorf("step duration should be at least 1 day")), http.StatusBadRequest)
 			return
 		}
 	}
@@ -302,8 +331,24 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// todo: parse other params
-	aggregate := make([]string, 0)
-	resolution := time.Duration(0)
+	aggregate := ""
+	if aggregateStr, ok := paramsMap["aggregate"]; ok {
+		aggregate = aggregateStr
+	}
+
+	resolution := ""
+	if resolutionStr, ok := paramsMap["resolution"]; ok {
+		matched, err := util.IsValidDurationString(resolutionStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'resolution' parameter %s: %s", paramsMap["resolution"], err), http.StatusBadRequest)
+			return
+		}
+		if !matched {
+			http.Error(w, fmt.Sprintf("Invalid 'resolution' parameter %s: %s", paramsMap["resolution"], fmt.Errorf("resolution should be a valid duration string")), http.StatusBadRequest)
+			return
+		}
+		resolution = resolutionStr
+	}
 
 	cm := NewCostManager()
 	asr, err := cm.GetRangeAllocation(TypeAllocation, window, resolution, step, aggregate, filter, "", AccumulateOptionNone, types.AllocationPretaxAmount)
@@ -317,9 +362,53 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("content-type", "application/json")
-	p, _ := json.Marshal(asr)
-	io.WriteString(w, string(p))
+	format := ""
+	if formatStr, ok := paramsMap["format"]; ok {
+		format = formatStr
+	}
+	switch format {
+	case "json", "":
+		w.Header().Set("content-type", "application/json")
+		p, _ := json.Marshal(asr)
+		io.WriteString(w, string(p))
+	case "csv":
+		filename := "allocation.csv"
+
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+		csvWriter := csv.NewWriter(w)
+		defer csvWriter.Flush()
+
+		var dimension string
+		if aggregate == "" {
+			dimension = "Pod"
+		} else {
+			caser := cases.Title(language.English)
+			dimension = caser.String(aggregate)
+		}
+		if err := csvWriter.Write([]string{dimension, "Start", "End", "Cost", "CostRatio"}); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to write csv: %s", err), http.StatusInternalServerError)
+			return
+		}
+
+		for _, as := range asr.Allocations {
+			for _, a := range *as {
+				record := []string{
+					a.Name,
+					a.Start.Format(time.RFC3339),
+					a.End.Format(time.RFC3339),
+					fmt.Sprintf("%f", a.Cost),
+					fmt.Sprintf("%f", a.CostRatio),
+				}
+
+				if err := csvWriter.Write(record); err != nil {
+					http.Error(w, fmt.Sprintf("Failed to write csv %s: %s", record, err), http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+
+	}
 }
 
 func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
@@ -355,8 +444,24 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// todo: parse other params
-	aggregate := make([]string, 0)
-	resolution := time.Duration(0)
+	aggregate := ""
+	if aggregateStr, ok := paramsMap["aggregate"]; ok {
+		aggregate = aggregateStr
+	}
+
+	resolution := ""
+	if resolutionStr, ok := paramsMap["resolution"]; ok {
+		matched, err := util.IsValidDurationString(resolutionStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'resolution' parameter %s: %s", paramsMap["resolution"], err), http.StatusBadRequest)
+			return
+		}
+		if !matched {
+			http.Error(w, fmt.Sprintf("Invalid 'resolution' parameter %s: %s", paramsMap["resolution"], fmt.Errorf("resolution should be a valid duration string")), http.StatusBadRequest)
+			return
+		}
+		resolution = resolutionStr
+	}
 
 	cm := NewCostManager()
 	asr, err := cm.GetRangeAllocation(TypeCost, window, resolution, step, aggregate, filter, "", AccumulateOptionNone, types.CostEstimated)
@@ -370,9 +475,96 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("content-type", "application/json")
-	p, _ := json.Marshal(asr)
-	io.WriteString(w, string(p))
+	format := ""
+	if formatStr, ok := paramsMap["format"]; ok {
+		format = formatStr
+	}
+	switch format {
+	case "json", "":
+		w.Header().Set("content-type", "application/json")
+		p, _ := json.Marshal(asr)
+		io.WriteString(w, string(p))
+	case "csv":
+		filename := "cost.csv"
+
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+		csvWriter := csv.NewWriter(w)
+		defer csvWriter.Flush()
+
+		var dimension string
+		if aggregate == "" {
+			dimension = "Pod"
+		} else {
+			caser := cases.Title(language.English)
+			dimension = caser.String(aggregate)
+		}
+		if err := csvWriter.Write([]string{dimension, "Start", "End", "Cost", "CostRatio"}); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to write csv: %s", err), http.StatusInternalServerError)
+			return
+		}
+
+		for _, as := range asr.Allocations {
+			for _, a := range *as {
+				record := []string{
+					a.Name,
+					a.Start.Format(time.RFC3339),
+					a.End.Format(time.RFC3339),
+					fmt.Sprintf("%f", a.Cost),
+					fmt.Sprintf("%f", a.CostRatio),
+				}
+
+				if err := csvWriter.Write(record); err != nil {
+					http.Error(w, fmt.Sprintf("Failed to write csv %s: %s", record, err), http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+	}
+}
+
+// preprocessFilter preprocess filter for deployment -> replicaSet
+func (cm *CostManager) preprocessFilter(filter *types.Filter) *types.Filter {
+	if filter == nil {
+		return filter
+	}
+
+	if filter.ControllerName != nil {
+		newControllerName := make([]string, 0)
+		for _, controller := range filter.ControllerName {
+			deployments, err := cm.client.AppsV1().Deployments("").List(context.TODO(), metav1.ListOptions{
+				FieldSelector: "metadata.name=" + controller,
+			})
+			if err != nil {
+				klog.Errorf("Failed to list deployments for %s: %s", controller, err)
+			}
+
+			if len(deployments.Items) == 0 {
+				newControllerName = append(newControllerName, controller)
+				continue
+			}
+
+			for _, deployment := range deployments.Items {
+				replicaSets, err := cm.client.AppsV1().ReplicaSets(deployment.Namespace).List(context.TODO(), metav1.ListOptions{
+					LabelSelector: metav1.FormatLabelSelector(deployment.Spec.Selector),
+				})
+				if err != nil {
+					klog.Errorf("Failed to list replicaSets for %s: %s", controller, err)
+				}
+
+				for _, rs := range replicaSets.Items {
+					for _, ownerRef := range rs.OwnerReferences {
+						if *ownerRef.Controller && ownerRef.UID == deployment.UID {
+							newControllerName = append(newControllerName, rs.Name)
+						}
+					}
+				}
+			}
+		}
+		filter.ControllerName = newControllerName
+	}
+
+	return filter
 }
 
 type Error struct {
