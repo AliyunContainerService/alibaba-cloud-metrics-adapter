@@ -9,6 +9,7 @@ import (
 )
 
 type Filter struct {
+	Cluster        []string
 	Namespace      []string
 	ControllerName []string
 	ControllerKind []string
@@ -42,6 +43,10 @@ func (f *Filter) GetLabelSelectorStr() string {
 				return ""
 			}
 		}
+	}
+
+	if err := addInRequirement("cluster", f.Cluster); err != nil {
+		return ""
 	}
 
 	if err := addInRequirement("namespace", f.Namespace); err != nil {
@@ -114,6 +119,8 @@ func ParseFilter(filterStr string) (*Filter, error) {
 		values := strings.Trim(kv[1], `+`)
 
 		switch {
+		case strings.HasPrefix(key, "cluster"):
+			filter.Cluster = parseValueList(values)
 		case strings.HasPrefix(key, "namespace"):
 			filter.Namespace = parseValueList(values)
 		case strings.HasPrefix(key, "controllerName"):
