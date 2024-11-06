@@ -93,6 +93,10 @@ func (cmd *AlibabaMetricsAdapterOptions) LoadConfig() error {
 }
 
 func (cmd *AlibabaMetricsAdapterOptions) MakePromClient() (prom.Client, error) {
+	if cmd.PrometheusURL == "" {
+		klog.Warning("no Prometheus URL specified (make sure to use --prometheus-url)")
+	}
+
 	baseURL, err := url.Parse(cmd.PrometheusURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid Prometheus URL %q: %v", baseURL, err)
