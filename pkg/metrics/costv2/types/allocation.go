@@ -32,11 +32,14 @@ type Allocation struct {
 }
 
 type AllocationProperties struct {
+	Cluster        string            `json:"cluster,omitempty"`
+	Node           string            `json:"node,omitempty"`
 	Controller     string            `json:"controller,omitempty"`
 	ControllerKind string            `json:"controllerKind,omitempty"`
 	Namespace      string            `json:"namespace,omitempty"`
 	Pod            string            `json:"pod,omitempty"`
 	Labels         map[string]string `json:"labels,omitempty"`
+	ProviderID     string            `json:"providerID,omitempty"`
 }
 
 type AllocationSet map[string]*Allocation

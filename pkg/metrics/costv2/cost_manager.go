@@ -92,6 +92,8 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 		return nil, err
 	}
 
+	cm.initPodMap(window, metricSelector, podMap)
+
 	cm.applyMetricToPodMap(window, CPUCoreRequestAverage, metricSelector, podMap)
 	cm.applyMetricToPodMap(window, CPUCoreUsageAverage, metricSelector, podMap)
 	cm.applyMetricToPodMap(window, MemoryRequestAverage, metricSelector, podMap)
@@ -131,31 +133,34 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 	return allocSet, nil
 }
 
-func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName string, metricSelector labels.Selector, podMap map[types.PodMeta]*types.Pod) {
-	valueList := cm.getExternalMetrics("*", metricName, metricSelector)
-	if valueList == nil || valueList.Items == nil {
-		klog.Errorf("external metric %s value is empty", metricName)
-		return
+func (cm *CostManager) initPodMap(window types.Window, metricSelector labels.Selector, podMap map[types.PodMeta]*types.Pod) {
+	klog.Infof("init podMap with window: %v", window)
+
+	// add pod properties from kube_pod_info
+	kubePodInfoList := cm.getExternalMetrics("*", KubePodInfo, metricSelector)
+	if kubePodInfoList == nil || kubePodInfoList.Items == nil {
+		klog.Errorf("external metric %s value is empty", KubePodInfo)
 	}
-	for _, value := range valueList.Items {
-		pod, ok := value.MetricLabels["pod"]
+	for _, item := range kubePodInfoList.Items {
+		pod, ok := item.MetricLabels["pod"]
 		if !ok {
-			klog.Errorf("failed to get pod name from external metric %s value", metricName)
-			return
+			klog.Errorf("failed to get pod name from external metric %s value for metric %+v", KubePodInfo, item)
+			continue
 		}
 
-		namespace, ok := value.MetricLabels["namespace"]
+		namespace, ok := item.MetricLabels["namespace"]
 		if !ok {
-			klog.Errorf("failed to get pod namespace from external metric %s value", metricName)
-			return
+			klog.Errorf("failed to get pod namespace from external metric %s value for metric %+v", KubePodInfo, item)
+			continue
 		}
 
 		key := types.PodMeta{Namespace: namespace, Pod: pod}
 
 		// init podMap metadata
 		if _, ok := podMap[key]; !ok {
-			controllerKind := strings.ToLower(value.MetricLabels["created_by_kind"])
-			controller := strings.ToLower(value.MetricLabels["created_by_name"])
+			controllerKind := strings.ToLower(item.MetricLabels["created_by_kind"])
+			controller := strings.ToLower(item.MetricLabels["created_by_name"])
+			node := item.MetricLabels["node"]
 
 			if controllerKind == "replicaset" {
 				replicaSet, err := cm.client.AppsV1().ReplicaSets(namespace).Get(context.TODO(), controller, metav1.GetOptions{})
@@ -183,11 +188,108 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 						ControllerKind: controllerKind,
 						Pod:            pod,
 						Namespace:      namespace,
+						Node:           node,
 					},
 				},
 				Window: window,
 			}
+
+			// set when metric has "cluster" label, for self-build prometheus
+			if cluster, ok := item.MetricLabels["cluster"]; ok {
+				podMap[key].Allocations.Properties.Cluster = cluster
+			}
 		}
+	}
+
+	// add pod properties from kube_pod_labels
+	kubePodLabelsList := cm.getExternalMetrics("*", KubePodLabels, metricSelector)
+	if kubePodLabelsList == nil || kubePodLabelsList.Items == nil {
+		klog.Errorf("external metric %s value is empty", KubePodLabels)
+	}
+	for _, item := range kubePodLabelsList.Items {
+		pod, ok := item.MetricLabels["pod"]
+		if !ok {
+			klog.Errorf("failed to get pod name from external metric %s value for metric %+v", KubePodInfo, item)
+			continue
+		}
+
+		namespace, ok := item.MetricLabels["namespace"]
+		if !ok {
+			klog.Errorf("failed to get pod namespace from external metric %s value for metric %+v", KubePodInfo, item)
+			continue
+		}
+
+		key := types.PodMeta{Namespace: namespace, Pod: pod}
+		if _, ok := podMap[key]; ok {
+			labels := getLabelsFromMetricLabels(item.MetricLabels)
+			podMap[key].Allocations.Properties.Labels = labels
+		}
+	}
+
+	// add pod properties from kube_node_info
+	nodeInfoList := cm.getExternalMetrics("*", KubeNodeInfo, metricSelector)
+	if nodeInfoList == nil || nodeInfoList.Items == nil {
+		klog.Errorf("external metric %s value is empty", KubeNodeInfo)
+	}
+	nodeProviderIdMap := make(map[string]string)
+	for _, item := range nodeInfoList.Items {
+		node, ok := item.MetricLabels["node"]
+		if !ok {
+			klog.Errorf("failed to get node name from external metric %s value for metric %+v", KubeNodeInfo, item)
+			continue
+		}
+
+		providerId, ok := item.MetricLabels["provider_id"]
+		if !ok {
+			klog.Errorf("failed to get providerID from external metric %s value for metric %+v", KubeNodeInfo, item)
+			continue
+		}
+
+		nodeProviderIdMap[node] = providerId
+	}
+	for _, pod := range podMap {
+		if providerId, ok := nodeProviderIdMap[pod.Allocations.Properties.Node]; ok {
+			pod.Allocations.Properties.ProviderID = providerId
+		}
+	}
+}
+
+func getLabelsFromMetricLabels(metricLabels map[string]string) map[string]string {
+	result := make(map[string]string)
+
+	// Find All keys with prefix label_, remove prefix, add to labels
+	for k, v := range metricLabels {
+		if !strings.HasPrefix(k, "label_") {
+			continue
+		}
+
+		label := strings.TrimPrefix(k, "label_")
+		result[label] = v
+	}
+
+	return result
+}
+
+func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName string, metricSelector labels.Selector, podMap map[types.PodMeta]*types.Pod) {
+	valueList := cm.getExternalMetrics("*", metricName, metricSelector)
+	if valueList == nil || valueList.Items == nil {
+		klog.Errorf("external metric %s value is empty", metricName)
+		return
+	}
+	for _, value := range valueList.Items {
+		pod, ok := value.MetricLabels["pod"]
+		if !ok {
+			klog.Errorf("failed to get pod name from external metric %s value", metricName)
+			return
+		}
+
+		namespace, ok := value.MetricLabels["namespace"]
+		if !ok {
+			klog.Errorf("failed to get pod namespace from external metric %s value", metricName)
+			return
+		}
+
+		key := types.PodMeta{Namespace: namespace, Pod: pod}
 
 		switch metricName {
 		case CPUCoreRequestAverage:
