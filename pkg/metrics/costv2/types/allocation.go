@@ -106,10 +106,12 @@ func (as *AllocationSet) AggregateBy(aggregateBy string, idleByNode bool) (*Allo
 			if alloc.Properties != nil {
 				aggregateKey = alloc.Properties.Node
 			}
-		} else if strings.HasPrefix(aggregateBy, "label:") && alloc.Properties != nil {
-			k := strings.TrimPrefix(aggregateBy, "label:")
-			if v, ok := alloc.Properties.Labels[k]; ok {
-				aggregateKey = v
+		} else if strings.HasPrefix(aggregateBy, "label:") {
+			if alloc.Properties != nil {
+				k := strings.TrimPrefix(aggregateBy, "label:")
+				if v, ok := alloc.Properties.Labels[k]; ok {
+					aggregateKey = v
+				}
 			}
 		} else {
 			return nil, fmt.Errorf("invalid 'aggregate' parameter: %s", aggregateBy)

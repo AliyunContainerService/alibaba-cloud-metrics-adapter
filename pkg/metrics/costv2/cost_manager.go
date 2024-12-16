@@ -169,8 +169,10 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, params Allocation
 				switch params.shareSplit {
 				case ShareSplitWeighted:
 					pod.Allocations.Cost += totalIdleCost * pod.Allocations.Cost / totalPodCost
+					pod.Allocations.CostRatio = pod.Allocations.Cost / totalCost
 				case ShareSplitEven:
 					pod.Allocations.Cost += totalIdleCost / float64(len(podMap))
+					pod.Allocations.CostRatio = pod.Allocations.Cost / totalCost
 				default:
 					return nil, fmt.Errorf("invalid 'shareSplit' parameter: %s", params.shareSplit)
 				}
