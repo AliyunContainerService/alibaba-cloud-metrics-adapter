@@ -91,18 +91,22 @@ func (as *AllocationSet) AggregateBy(aggregateBy string, idleByNode bool) (*Allo
 	for _, alloc := range *as {
 		aggregateKey := ""
 		if aggregateBy == "namespace" {
-			aggregateKey = alloc.Properties.Namespace
+			if alloc.Properties != nil {
+				aggregateKey = alloc.Properties.Namespace
+			}
 		} else if aggregateBy == "controller" {
-			if alloc.Properties.Controller != "<none>" && alloc.Properties.ControllerKind != "<none>" {
+			if alloc.Properties != nil && alloc.Properties.Controller != "<none>" && alloc.Properties.ControllerKind != "<none>" {
 				aggregateKey = fmt.Sprintf("%s:%s", alloc.Properties.ControllerKind, alloc.Properties.Controller)
 			}
 		} else if aggregateBy == "controllerKind" {
-			if alloc.Properties.ControllerKind != "<none>" {
+			if alloc.Properties != nil && alloc.Properties.ControllerKind != "<none>" {
 				aggregateKey = alloc.Properties.ControllerKind
 			}
 		} else if aggregateBy == "node" {
-			aggregateKey = alloc.Properties.Node
-		} else if strings.HasPrefix(aggregateBy, "label:") {
+			if alloc.Properties != nil {
+				aggregateKey = alloc.Properties.Node
+			}
+		} else if strings.HasPrefix(aggregateBy, "label:") && alloc.Properties != nil {
 			k := strings.TrimPrefix(aggregateBy, "label:")
 			if v, ok := alloc.Properties.Labels[k]; ok {
 				aggregateKey = v
