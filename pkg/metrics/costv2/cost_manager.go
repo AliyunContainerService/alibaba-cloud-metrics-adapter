@@ -21,6 +21,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -30,6 +31,9 @@ type APIType string
 const (
 	TypeCost       APIType = "cost"
 	TypeAllocation APIType = "allocation"
+
+	ShareSplitWeighted = "weighted"
+	ShareSplitEven     = "even"
 )
 
 type CostManager struct {
@@ -67,8 +71,23 @@ func (cm *CostManager) getExternalMetrics(namespace, metricName string, metricSe
 	return metrics
 }
 
-func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, resolution string, filter *types.Filter, costType types.CostType) (*types.AllocationSet, error) {
-	klog.V(4).Infof("compute allocation params: apiType: %v, start: %v, end: %v, resolution: %v, filter: %v, costTpe: %v", apiType, start, end, resolution, filter, costType)
+type AllocationParams struct {
+	apiType      APIType
+	window       types.Window
+	resolution   string
+	step         time.Duration
+	aggregate    string
+	filter       *types.Filter
+	accumulateBy AccumulateOption
+	costType     types.CostType
+	idle         bool
+	shareIdle    bool
+	shareSplit   string
+	idleByNode   bool
+}
+
+func (cm *CostManager) ComputeAllocation(start, end time.Time, params AllocationParams) (*types.AllocationSet, error) {
+	klog.V(4).Infof("compute allocation params from %v to %v: %+v", start, end, params)
 
 	window := types.NewWindow(&start, &end)
 	allocSet := types.NewAllocationSet()
@@ -78,12 +97,12 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 	if window.GetLabelSelectorStr() != "" {
 		selectorStr = append(selectorStr, window.GetLabelSelectorStr())
 	}
-	filter = cm.preprocessFilter(filter)
-	if filter.GetLabelSelectorStr() != "" {
-		selectorStr = append(selectorStr, filter.GetLabelSelectorStr())
+	params.filter = cm.preprocessFilter(params.filter)
+	if params.filter.GetLabelSelectorStr() != "" {
+		selectorStr = append(selectorStr, params.filter.GetLabelSelectorStr())
 	}
-	if resolution != "" {
-		selectorStr = append(selectorStr, fmt.Sprintf("resolution=%s", resolution))
+	if params.resolution != "" {
+		selectorStr = append(selectorStr, fmt.Sprintf("resolution=%s", params.resolution))
 	}
 
 	metricSelector, err := labels.Parse(strings.Join(selectorStr, ","))
@@ -103,31 +122,84 @@ func (cm *CostManager) ComputeAllocation(apiType APIType, start, end time.Time, 
 	cm.applyMetricToPodMap(window, CostCustom, metricSelector, podMap)
 
 	weightCPU, weightRAM := getCostWeights()
-	totalCost := cm.getSingleValueMetric(CostTotal, metricSelector)
+	nodeCostList := cm.getExternalMetrics("*", CostNode, metricSelector)
+	totalCost := 0.0
+	for _, nodeCost := range nodeCostList.Items {
+		totalCost += float64(nodeCost.Value.MilliValue() / 1000)
+	}
 
 	totalBilling := 0.0
-	switch costType {
+	switch params.costType {
 	case types.AllocationPretaxAmount:
 		totalBilling = cm.getSingleValueMetric(BillingPretaxAmountTotal, metricSelector)
 	case types.AllocationPretaxGrossAmount:
 		totalBilling = cm.getSingleValueMetric(BillingPretaxGrossAmountTotal, metricSelector)
 	}
-	klog.Infof("compute allocation for %v API. totalCost: %v, totalBilling: %v", apiType, totalCost, totalBilling)
+	klog.Infof("compute allocation for %v API. totalCost: %v, totalBilling: %v", params.apiType, totalCost, totalBilling)
 
+	totalPodCost := 0.0
+	totalPodCostRatio := 0.0
 	for _, pod := range podMap {
 		pod.Allocations.Cost = pod.CostMeta.CostCPURequest*weightCPU + pod.CostMeta.CostRAMRequest*weightRAM
+		pod.Allocations.Cost = math.Round(pod.Allocations.Cost*1000) / 1000
 
 		if totalCost != 0 {
 			pod.Allocations.CostRatio = pod.Allocations.Cost / totalCost
 
-			if apiType == TypeAllocation {
+			if params.apiType == TypeAllocation {
 				pod.Allocations.Cost = pod.Allocations.CostRatio * totalBilling
 			}
 		}
 
-		pod.Allocations.Cost = math.Round(pod.Allocations.Cost*1000) / 1000
+		totalPodCost += pod.Allocations.Cost
+		totalPodCostRatio += pod.Allocations.CostRatio
 
 		allocSet.Set(pod.Allocations)
+	}
+
+	// idle cost
+	if params.idle && (params.filter == nil || params.filter.IsNonClusterEmpty()) {
+		klog.Infof("compute idle cost for %s API. shareIdle: %v, shareSplit: %s, idleByNode: %v", params.apiType, params.shareIdle, params.shareSplit, params.idleByNode)
+		totalIdleCost := totalCost - totalPodCost
+		totalIdleCostRatio := 1 - totalPodCostRatio
+
+		if params.shareIdle {
+			// share idle cost to each pod
+			for _, pod := range podMap {
+				switch params.shareSplit {
+				case ShareSplitWeighted:
+					pod.Allocations.Cost += totalIdleCost * pod.Allocations.Cost / totalPodCost
+				case ShareSplitEven:
+					pod.Allocations.Cost += totalIdleCost / float64(len(podMap))
+				default:
+					return nil, fmt.Errorf("invalid 'shareSplit' parameter: %s", params.shareSplit)
+				}
+			}
+		} else {
+			// show idle cost separately
+			if params.aggregate == "node" && params.idleByNode {
+				// here only record node price. idleByNode cost will be computed while aggregating nodes.
+				for _, nodeCost := range nodeCostList.Items {
+					idleNodeAllocation := &types.Allocation{
+						Name:      fmt.Sprintf("%s%s", types.SplitIdlePrefix, nodeCost.MetricLabels["node"]),
+						Start:     *window.Start(),
+						End:       *window.End(),
+						Cost:      float64(nodeCost.Value.MilliValue() / 1000),
+						CostRatio: float64(nodeCost.Value.MilliValue()/1000) / totalCost,
+					}
+					allocSet.Set(idleNodeAllocation)
+				}
+			} else {
+				idleAllocation := &types.Allocation{
+					Name:      types.IdleSuffix,
+					Start:     *window.Start(),
+					End:       *window.End(),
+					Cost:      totalIdleCost,
+					CostRatio: totalIdleCostRatio,
+				}
+				allocSet.Set(idleAllocation)
+			}
+		}
 	}
 
 	return allocSet, nil
@@ -328,12 +400,12 @@ func getCostWeights() (cpu, memory float64) {
 	return costWeights.CPU, costWeights.Memory
 }
 
-func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, resolution string, step time.Duration, aggregate string, filter *types.Filter, format string, accumulateBy AccumulateOption, costType types.CostType) (*types.AllocationSetRange, error) {
-	klog.Infof("get range allocation params: apiType: %s, window: %s, resolution: %s, step: %s, aggregate: %s, filter: %s, format: %s, accumulateBy: %s, costType: %s", apiType, window, resolution, step, aggregate, filter, format, accumulateBy, costType)
+func (cm *CostManager) GetRangeAllocation(params AllocationParams) (*types.AllocationSetRange, error) {
+	klog.Infof("get range allocation params: +%v", params)
 
 	// Validate window is legal
-	if window.IsOpen() || window.IsNegative() {
-		return nil, fmt.Errorf("bad request - illegal window: %v", window)
+	if params.window.IsOpen() || params.window.IsNegative() {
+		return nil, fmt.Errorf("bad request - illegal window: %v", params.window)
 	}
 
 	// Begin with empty response
@@ -341,10 +413,10 @@ func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, 
 
 	// Query for AllocationSets in increments of the given step duration,
 	// appending each to the response.
-	stepStart := *window.Start()
-	stepEnd := stepStart.Add(step)
-	for window.End().After(stepStart) {
-		allocSet, err := cm.ComputeAllocation(apiType, stepStart, stepEnd, resolution, filter, costType)
+	stepStart := *params.window.Start()
+	stepEnd := stepStart.Add(params.step)
+	for params.window.End().After(stepStart) {
+		allocSet, err := cm.ComputeAllocation(stepStart, stepEnd, params)
 		if err != nil {
 			return nil, fmt.Errorf("error computing allocations for %v: %w", types.NewClosedWindow(stepStart, stepEnd), err)
 		}
@@ -352,13 +424,13 @@ func (cm *CostManager) GetRangeAllocation(apiType APIType, window types.Window, 
 		asr.Append(allocSet)
 
 		stepStart = stepEnd
-		stepEnd = stepStart.Add(step)
-		if stepEnd.After(*window.End()) {
-			stepEnd = *window.End()
+		stepEnd = stepStart.Add(params.step)
+		if stepEnd.After(*params.window.End()) {
+			stepEnd = *params.window.End()
 		}
 	}
 
-	if err := asr.AggregateBy(aggregate); err != nil {
+	if err := asr.AggregateBy(params.aggregate, params.idleByNode); err != nil {
 		return nil, fmt.Errorf("error aggregating allocations: %w", err)
 	}
 
@@ -452,8 +524,54 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 		resolution = resolutionStr
 	}
 
+	idle := true
+	if idleStr, ok := paramsMap["idle"]; ok {
+		idle, err = strconv.ParseBool(idleStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'idle' parameter %s: %s", paramsMap["idle"], err), http.StatusBadRequest)
+			return
+		}
+	}
+
+	shareIdle := false
+	if shareIdleStr, ok := paramsMap["shareIdle"]; ok {
+		shareIdle, err = strconv.ParseBool(shareIdleStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'shareIdle' parameter %s: %s", paramsMap["shareIdle"], err), http.StatusBadRequest)
+			return
+		}
+	}
+
+	shareSplit := ShareSplitWeighted
+	if shareSplitStr, ok := paramsMap["shareSplit"]; ok {
+		shareSplit = shareSplitStr
+	}
+
+	idleByNode := false
+	if idleByNodeStr, ok := paramsMap["idleByNode"]; ok {
+		idleByNode, err = strconv.ParseBool(idleByNodeStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'idleByNode' parameter %s: %s", paramsMap["idleByNode"], err), http.StatusBadRequest)
+			return
+		}
+	}
+
 	cm := NewCostManager()
-	asr, err := cm.GetRangeAllocation(TypeAllocation, window, resolution, step, aggregate, filter, "", AccumulateOptionNone, types.AllocationPretaxAmount)
+	allocationParams := AllocationParams{
+		window:       window,
+		resolution:   resolution,
+		step:         step,
+		aggregate:    aggregate,
+		filter:       filter,
+		apiType:      TypeAllocation,
+		accumulateBy: AccumulateOptionNone,
+		costType:     types.AllocationPretaxAmount,
+		idle:         idle,
+		shareIdle:    shareIdle,
+		shareSplit:   shareSplit,
+		idleByNode:   idleByNode,
+	}
+	asr, err := cm.GetRangeAllocation(allocationParams)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "bad request") {
 			WriteError(w, BadRequest(err.Error()))
@@ -565,8 +683,54 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 		resolution = resolutionStr
 	}
 
+	idle := true
+	if idleStr, ok := paramsMap["idle"]; ok {
+		idle, err = strconv.ParseBool(idleStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'idle' parameter %s: %s", paramsMap["idle"], err), http.StatusBadRequest)
+			return
+		}
+	}
+
+	shareIdle := false
+	if shareIdleStr, ok := paramsMap["shareIdle"]; ok {
+		shareIdle, err = strconv.ParseBool(shareIdleStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'shareIdle' parameter %s: %s", paramsMap["shareIdle"], err), http.StatusBadRequest)
+			return
+		}
+	}
+
+	shareSplit := ShareSplitWeighted
+	if shareSplitStr, ok := paramsMap["shareSplit"]; ok {
+		shareSplit = shareSplitStr
+	}
+
+	idleByNode := false
+	if idleByNodeStr, ok := paramsMap["idleByNode"]; ok {
+		idleByNode, err = strconv.ParseBool(idleByNodeStr)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid 'idleByNode' parameter %s: %s", paramsMap["idleByNode"], err), http.StatusBadRequest)
+			return
+		}
+	}
+
 	cm := NewCostManager()
-	asr, err := cm.GetRangeAllocation(TypeCost, window, resolution, step, aggregate, filter, "", AccumulateOptionNone, types.CostEstimated)
+	allocationParams := AllocationParams{
+		window:       window,
+		resolution:   resolution,
+		step:         step,
+		aggregate:    aggregate,
+		filter:       filter,
+		apiType:      TypeCost,
+		accumulateBy: AccumulateOptionNone,
+		costType:     types.CostEstimated,
+		idle:         idle,
+		shareIdle:    shareIdle,
+		shareSplit:   shareSplit,
+		idleByNode:   idleByNode,
+	}
+	asr, err := cm.GetRangeAllocation(allocationParams)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "bad request") {
 			WriteError(w, BadRequest(err.Error()))

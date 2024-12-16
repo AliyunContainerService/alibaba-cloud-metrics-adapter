@@ -2,6 +2,7 @@ package costv2
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -11,6 +12,10 @@ const (
 	AllocationPretaxAmount      CostType = "allocation_pretax_amount"
 	AllocationPretaxGrossAmount CostType = "allocation_pretax_gross_amount"
 	CostEstimated               CostType = "cost_estimated"
+
+	SplitIdlePrefix   = "idle:"
+	IdleSuffix        = "__idle__"
+	UnallocatedSuffix = "__unallocated__"
 )
 
 type Allocation struct {
@@ -72,7 +77,7 @@ func (as *AllocationSet) Set(alloc *Allocation) error {
 	return nil
 }
 
-func (as *AllocationSet) AggregateBy(aggregateBy string) (*AllocationSet, error) {
+func (as *AllocationSet) AggregateBy(aggregateBy string, idleByNode bool) (*AllocationSet, error) {
 	if as.IsEmpty() {
 		return nil, nil
 	}
@@ -85,15 +90,35 @@ func (as *AllocationSet) AggregateBy(aggregateBy string) (*AllocationSet, error)
 
 	for _, alloc := range *as {
 		aggregateKey := ""
-		switch aggregateBy {
-		case "namespace":
+		if aggregateBy == "namespace" {
 			aggregateKey = alloc.Properties.Namespace
-		case "controller":
-			aggregateKey = fmt.Sprintf("%s:%s", alloc.Properties.ControllerKind, alloc.Properties.Controller)
-		case "controllerKind":
-			aggregateKey = alloc.Properties.ControllerKind
-		default:
+		} else if aggregateBy == "controller" {
+			if alloc.Properties.Controller != "<none>" && alloc.Properties.ControllerKind != "<none>" {
+				aggregateKey = fmt.Sprintf("%s:%s", alloc.Properties.ControllerKind, alloc.Properties.Controller)
+			}
+		} else if aggregateBy == "controllerKind" {
+			if alloc.Properties.ControllerKind != "<none>" {
+				aggregateKey = alloc.Properties.ControllerKind
+			}
+		} else if aggregateBy == "node" {
+			aggregateKey = alloc.Properties.Node
+		} else if strings.HasPrefix(aggregateBy, "label:") {
+			k := strings.TrimPrefix(aggregateBy, "label:")
+			if v, ok := alloc.Properties.Labels[k]; ok {
+				aggregateKey = v
+			}
+		} else {
 			return nil, fmt.Errorf("invalid 'aggregate' parameter: %s", aggregateBy)
+		}
+
+		// idle cost
+		if alloc.Name == IdleSuffix || strings.HasPrefix(alloc.Name, SplitIdlePrefix) {
+			aggregateKey = alloc.Name
+		}
+
+		// unallocated cost
+		if aggregateKey == "" {
+			aggregateKey = UnallocatedSuffix
 		}
 
 		if v, ok := aggSet[aggregateKey]; !ok {
@@ -120,6 +145,19 @@ func (as *AllocationSet) AggregateBy(aggregateBy string) (*AllocationSet, error)
 		}
 	}
 
+	if aggregateBy == "node" && idleByNode {
+		for k := range aggSet {
+			if !strings.HasPrefix(k, SplitIdlePrefix) {
+				continue
+			}
+
+			if alloc, ok := aggSet[strings.TrimPrefix(k, SplitIdlePrefix)]; ok {
+				aggSet[k].Cost -= alloc.Cost
+				aggSet[k].CostRatio -= alloc.CostRatio
+			}
+		}
+	}
+
 	return &aggSet, nil
 }
 
@@ -137,11 +175,11 @@ func NewAllocationSetRange(allocs ...*AllocationSet) *AllocationSetRange {
 
 // AggregateBy aggregates each AllocationSet in the range by the given
 // properties and options.
-func (asr *AllocationSetRange) AggregateBy(aggregateBy string) error {
+func (asr *AllocationSetRange) AggregateBy(aggregateBy string, idleByNode bool) error {
 	asList := make([]*AllocationSet, 0)
 
 	for _, as := range asr.Allocations {
-		newAs, err := as.AggregateBy(aggregateBy)
+		newAs, err := as.AggregateBy(aggregateBy, idleByNode)
 		if err != nil {
 			return err
 		}

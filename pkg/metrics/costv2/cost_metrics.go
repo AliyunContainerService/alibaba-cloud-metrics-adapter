@@ -28,6 +28,7 @@ const (
 	CostPodCPURequest             = "cost_pod_cpu_request"
 	CostPodMemoryRequest          = "cost_pod_memory_request"
 	CostTotal                     = "cost_total"
+	CostNode                      = "cost_node"
 	CostCustom                    = "cost_custom"
 	BillingPretaxAmountTotal      = "billing_pretax_amount_total"
 	BillingPretaxGrossAmountTotal = "billing_pretax_gross_amount_total"
@@ -44,6 +45,7 @@ const (
 	QueryCostPodCPURequest             = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left max(kube_node_status_capacity{resource="cpu"}) by(node) * on(node) group_right max(kube_pod_container_resource_requests{resource="cpu"}) by (node,pod,namespace,container) * on(pod, namespace) group_left max(kube_pod_status_phase{phase=~"Running"}) by (pod,namespace))[%s])) by (namespace, pod) * %s`
 	QueryCostPodMemoryRequest          = `sum(sum_over_time((max(node_current_price) by (node) / on (node)  group_left max(kube_node_status_capacity{resource="memory"}) by(node) * on(node) group_right max(kube_pod_container_resource_requests{resource="memory"}) by (node,pod,namespace,container) * on(pod, namespace) group_left max(kube_pod_status_phase{phase=~"Running"}) by (pod,namespace))[%s])) by (namespace, pod) * %s`
 	QueryCostTotal                     = `sum(sum_over_time((max(node_current_price{%s}) by (node))[%s])) * %s`
+	QueryCostNode                      = `sum_over_time((max(node_current_price{%s}) by (node))[%s]) * %s`
 	QueryCostCustom                    = `sum_over_time((max(label_replace(label_replace(pod_custom_price, "namespace", "$1", "exported_namespace", "(.*)"), "pod", "$1", "exported_pod", "(.*)")) by (namespace,pod))[%s]) * %s`
 	QueryBillingPretaxAmountTotal      = `sum(sum_over_time(max(pretax_amount{%s}) by (product_code, instance_id)[%s]))`
 	QueryBillingPretaxGrossAmountTotal = `sum(sum_over_time(max(pretax_gross_amount{%s}) by (product_code, instance_id)[%s]))`
@@ -76,6 +78,7 @@ func (cs *COSTV2MetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo
 		CostPodCPURequest,
 		CostPodMemoryRequest,
 		CostTotal,
+		CostNode,
 		CostCustom,
 		BillingPretaxAmountTotal,
 		BillingPretaxGrossAmountTotal,
@@ -283,6 +286,9 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 		externalQuery = prom.Selector(fmt.Sprintf(item, durStr, resolutionSecs, kubePodLabelStr, kubePodInfoStr, durStr))
 	case CostTotal:
 		item := fmt.Sprintf("%s", QueryCostTotal)
+		externalQuery = prom.Selector(fmt.Sprintf(item, commonPromLabelStr, durStr, resolutionSecs))
+	case CostNode:
+		item := fmt.Sprintf("%s", QueryCostNode)
 		externalQuery = prom.Selector(fmt.Sprintf(item, commonPromLabelStr, durStr, resolutionSecs))
 	case CostCustom:
 		item := fmt.Sprintf("%s * %s", QueryCostCustom, groupedQueryFilteredPodInfo)

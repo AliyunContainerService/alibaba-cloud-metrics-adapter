@@ -160,3 +160,11 @@ func ParseFilter(filterStr string) (*Filter, error) {
 
 	return filter, nil
 }
+
+func (f *Filter) IsNonClusterEmpty() bool {
+	return len(f.Namespace) == 0 &&
+		len(f.ControllerName) == 0 &&
+		len(f.ControllerKind) == 0 &&
+		len(f.Pod) == 0 &&
+		len(f.Label) == 0
+}
