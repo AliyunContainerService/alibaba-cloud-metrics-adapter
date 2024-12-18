@@ -830,20 +830,39 @@ func writeCSVAllocationResponse(w http.ResponseWriter, filename string, asr type
 		for _, a := range *as {
 			var record []string
 			if params.aggregate == "pod" {
+				controller := ""
+				controllerKind := ""
+				node := ""
+				providerID := ""
+				labels := ""
+				cluster := ""
+				if a.Properties != nil {
+					controller = a.Properties.Controller
+					controllerKind = a.Properties.ControllerKind
+					node = a.Properties.Node
+					providerID = a.Properties.ProviderID
+					labelsBytes, err := json.Marshal(a.Properties.Labels)
+					if err != nil {
+						return fmt.Errorf("failed to marshal labels: %w, labels: %v", err, a.Properties.Labels)
+					}
+					labels = string(labelsBytes)
+					cluster = a.Properties.Cluster
+				}
+
 				record = []string{
 					a.Name,
 					a.Start.Format(time.RFC3339),
 					a.End.Format(time.RFC3339),
 					fmt.Sprintf("%f", a.Cost),
 					fmt.Sprintf("%f", a.CostRatio),
-					a.Properties.Controller,
-					a.Properties.ControllerKind,
-					a.Properties.Node,
-					a.Properties.ProviderID,
-					fmt.Sprintf("%s", a.Properties.Labels),
+					controller,
+					controllerKind,
+					node,
+					providerID,
+					labels,
 					fmt.Sprintf("%f", a.CPUCoreUsageAverage),
 					fmt.Sprintf("%f", a.RAMBytesUsageAverage),
-					a.Properties.Cluster,
+					cluster,
 				}
 			} else {
 				record = []string{
