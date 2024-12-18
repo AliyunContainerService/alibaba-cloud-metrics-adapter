@@ -84,6 +84,7 @@ type AllocationParams struct {
 	shareIdle    bool
 	shareSplit   string
 	idleByNode   bool
+	targetType   string
 }
 
 func (cm *CostManager) ComputeAllocation(start, end time.Time, params AllocationParams) (*types.AllocationSet, error) {
@@ -128,33 +129,48 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, params Allocation
 		totalCost += float64(nodeCost.Value.MilliValue() / 1000)
 	}
 
-	totalBilling := 0.0
-	switch params.costType {
-	case types.AllocationPretaxAmount:
-		totalBilling = cm.getSingleValueMetric(BillingPretaxAmountTotal, metricSelector)
-	case types.AllocationPretaxGrossAmount:
-		totalBilling = cm.getSingleValueMetric(BillingPretaxGrossAmountTotal, metricSelector)
-	}
-	klog.Infof("compute allocation for %v API. totalCost: %v, totalBilling: %v", params.apiType, totalCost, totalBilling)
-
+	// compute pod estimated cost
 	totalPodCost := 0.0
 	totalPodCostRatio := 0.0
 	for _, pod := range podMap {
 		pod.Allocations.Cost = pod.CostMeta.CostCPURequest*weightCPU + pod.CostMeta.CostRAMRequest*weightRAM
 		pod.Allocations.Cost = math.Round(pod.Allocations.Cost*1000) / 1000
-
 		if totalCost != 0 {
 			pod.Allocations.CostRatio = pod.Allocations.Cost / totalCost
-
-			if params.apiType == TypeAllocation {
-				pod.Allocations.Cost = pod.Allocations.CostRatio * totalBilling
-			}
 		}
 
 		totalPodCost += pod.Allocations.Cost
 		totalPodCostRatio += pod.Allocations.CostRatio
 
 		allocSet.Set(pod.Allocations)
+	}
+
+	// if allocation api, compute pod billing allocation
+	if params.apiType == TypeAllocation {
+		totalBilling := 0.0
+		if params.targetType == "cluster" {
+			switch params.costType {
+			case types.AllocationPretaxAmount:
+				totalBilling = cm.getSingleValueMetric(BillingPretaxAmountTotal, metricSelector)
+			case types.AllocationPretaxGrossAmount:
+				totalBilling = cm.getSingleValueMetric(BillingPretaxGrossAmountTotal, metricSelector)
+			}
+		} else if params.targetType == "node" {
+			switch params.costType {
+			case types.AllocationPretaxAmount:
+				totalBilling = cm.getSingleValueMetric(BillingPretaxAmountNode, metricSelector)
+			}
+		} else {
+			return nil, fmt.Errorf("invalid 'targetType' parameter: %s", params.targetType)
+		}
+		klog.Infof("compute allocation for %v API. totalCost: %v, totalBilling: %v", params.apiType, totalCost, totalBilling)
+
+		totalCost = totalBilling
+		totalPodCost = 0.0
+		for _, pod := range podMap {
+			pod.Allocations.Cost = pod.Allocations.CostRatio * totalCost
+			totalPodCost += pod.Allocations.Cost
+		}
 	}
 
 	// idle cost
@@ -501,6 +517,11 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	targetType := "cluster"
+	if targetTypeStr, ok := paramsMap["targetType"]; ok {
+		targetType = targetTypeStr
+	}
+
 	// todo: this param need to follow finops focus, now default is PretaxAmount
 	if costType, ok := paramsMap["costType"]; ok {
 		klog.Infof("compute allocation params: costType: %s", costType)
@@ -572,6 +593,7 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 		shareIdle:    shareIdle,
 		shareSplit:   shareSplit,
 		idleByNode:   idleByNode,
+		targetType:   targetType,
 	}
 	asr, err := cm.GetRangeAllocation(allocationParams)
 	if err != nil {

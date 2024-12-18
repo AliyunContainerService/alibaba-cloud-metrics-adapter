@@ -32,6 +32,7 @@ const (
 	CostCustom                    = "cost_custom"
 	BillingPretaxAmountTotal      = "billing_pretax_amount_total"
 	BillingPretaxGrossAmountTotal = "billing_pretax_gross_amount_total"
+	BillingPretaxAmountNode       = "billing_pretax_amount_node"
 
 	KubePodInfo   = "metrics_kube_pod_info"
 	KubePodLabels = "metrics_kube_pod_labels"
@@ -49,6 +50,7 @@ const (
 	QueryCostCustom                    = `sum_over_time((max(label_replace(label_replace(pod_custom_price, "namespace", "$1", "exported_namespace", "(.*)"), "pod", "$1", "exported_pod", "(.*)")) by (namespace,pod))[%s]) * %s`
 	QueryBillingPretaxAmountTotal      = `sum(sum_over_time(max(pretax_amount{%s}) by (product_code, instance_id)[%s]))`
 	QueryBillingPretaxGrossAmountTotal = `sum(sum_over_time(max(pretax_gross_amount{%s}) by (product_code, instance_id)[%s]))`
+	QueryBillingPretaxAmountNode       = `sum(sum_over_time(max(pretax_amount{product_code="ecs"%s}) by (product_code, instance_id)[%s]))`
 
 	// QueryFilteredPodInfo is the Pod Filter
 	// `max(kube_pod_labels{%s}) by (pod,namespace)`, value is 1, used to filter pods with specified labels.
@@ -82,6 +84,7 @@ func (cs *COSTV2MetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo
 		CostCustom,
 		BillingPretaxAmountTotal,
 		BillingPretaxGrossAmountTotal,
+		BillingPretaxAmountNode,
 	}
 	for _, metric := range MetricArray {
 		metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
@@ -115,7 +118,7 @@ func (cs *COSTV2MetricSource) getCostMetricsAtTime(namespace, metricName string,
 	}
 
 	// billing metrics are always 00:00:00, add -1 second to avoid data duplication
-	if metricName == BillingPretaxGrossAmountTotal || metricName == BillingPretaxAmountTotal {
+	if metricName == BillingPretaxGrossAmountTotal || metricName == BillingPretaxAmountTotal || metricName == BillingPretaxAmountNode {
 		if end.Hour() == 0 && end.Minute() == 0 && end.Second() == 0 {
 			end = end.Add(-time.Second)
 		}
@@ -299,6 +302,9 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 	case BillingPretaxGrossAmountTotal:
 		item := fmt.Sprintf("%s", QueryBillingPretaxGrossAmountTotal)
 		externalQuery = prom.Selector(fmt.Sprintf(item, commonPromLabelStr, durStr))
+	case BillingPretaxAmountNode:
+		item := fmt.Sprintf("%s", QueryBillingPretaxAmountNode)
+		externalQuery = prom.Selector(fmt.Sprintf(item, ","+commonPromLabelStr, durStr))
 	}
 
 	return externalQuery
