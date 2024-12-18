@@ -123,11 +123,12 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, params Allocation
 	cm.applyMetricToPodMap(window, CostCustom, metricSelector, podMap)
 
 	weightCPU, weightRAM := getCostWeights()
+	totalNodeCost := 0.0
 	nodeCostList := cm.getExternalMetrics("*", CostNode, metricSelector)
-	totalCost := 0.0
 	for _, nodeCost := range nodeCostList.Items {
-		totalCost += float64(nodeCost.Value.MilliValue() / 1000)
+		totalNodeCost += float64(nodeCost.Value.MilliValue() / 1000)
 	}
+	totalCost := totalNodeCost
 
 	// compute pod estimated cost
 	totalPodCost := 0.0
@@ -202,8 +203,8 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, params Allocation
 						Name:      fmt.Sprintf("%s%s", types.SplitIdlePrefix, nodeCost.MetricLabels["node"]),
 						Start:     *window.Start(),
 						End:       *window.End(),
-						Cost:      float64(nodeCost.Value.MilliValue() / 1000),
-						CostRatio: float64(nodeCost.Value.MilliValue()/1000) / totalCost,
+						Cost:      float64(nodeCost.Value.MilliValue()/1000) / totalNodeCost * totalCost,
+						CostRatio: float64(nodeCost.Value.MilliValue()/1000) / totalNodeCost,
 					}
 					allocSet.Set(idleNodeAllocation)
 				}
