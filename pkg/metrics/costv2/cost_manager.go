@@ -174,7 +174,7 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, params Allocation
 	}
 
 	// idle cost
-	if params.idle && (params.filter == nil || params.filter.IsNonClusterEmpty()) {
+	if params.idle && (params.filter == nil || params.filter.IsEmptyExceptCluster()) {
 		klog.Infof("compute idle cost for %s API. shareIdle: %v, shareSplit: %s, idleByNode: %v", params.apiType, params.shareIdle, params.shareSplit, params.idleByNode)
 		totalIdleCost := totalCost - totalPodCost
 		totalIdleCostRatio := 1 - totalPodCostRatio
@@ -370,13 +370,13 @@ func (cm *CostManager) applyMetricToPodMap(window types.Window, metricName strin
 		pod, ok := value.MetricLabels["pod"]
 		if !ok {
 			klog.Errorf("failed to get pod name from external metric %s value", metricName)
-			return
+			continue
 		}
 
 		namespace, ok := value.MetricLabels["namespace"]
 		if !ok {
 			klog.Errorf("failed to get pod namespace from external metric %s value", metricName)
-			return
+			continue
 		}
 
 		key := types.PodMeta{Namespace: namespace, Pod: pod}

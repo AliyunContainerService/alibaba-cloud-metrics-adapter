@@ -58,8 +58,6 @@ const (
 	QueryFilteredPodInfo   = `max_over_time((max(kube_pod_labels{%s}) by (pod,namespace) * on(pod, namespace) group_right kube_pod_info{%s})[%s])`
 	QueryFilteredPodLabels = `max_over_time((max(kube_pod_info{%s}) by (pod,namespace) * on(pod, namespace) group_right kube_pod_labels{%s})[%s])`
 	QueryNodeInfo          = `max_over_time(kube_node_info{%s}[%s])`
-	//先初始化meta，后面只做计算逻辑
-	//后面如果遇到不一致，就只判断有meta就填入，，没有就算了】
 )
 
 type COSTV2MetricSource struct {
