@@ -528,7 +528,7 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// todo: parse other params
-	aggregate := ""
+	aggregate := "pod"
 	if aggregateStr, ok := paramsMap["aggregate"]; ok {
 		aggregate = aggregateStr
 	}
@@ -617,41 +617,9 @@ func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, string(p))
 	case "csv":
 		filename := "allocation.csv"
-
-		w.Header().Set("Content-Type", "text/csv")
-		w.Header().Set("Content-Disposition", "attachment; filename="+filename)
-		csvWriter := csv.NewWriter(w)
-		defer csvWriter.Flush()
-
-		var dimension string
-		if aggregate == "" {
-			dimension = "Pod"
-		} else {
-			caser := cases.Title(language.English)
-			dimension = caser.String(aggregate)
+		if err := writeCSVAllocationResponse(w, filename, *asr, allocationParams); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		if err := csvWriter.Write([]string{dimension, "Start", "End", "Cost", "CostRatio"}); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to write csv: %s", err), http.StatusInternalServerError)
-			return
-		}
-
-		for _, as := range asr.Allocations {
-			for _, a := range *as {
-				record := []string{
-					a.Name,
-					a.Start.Format(time.RFC3339),
-					a.End.Format(time.RFC3339),
-					fmt.Sprintf("%f", a.Cost),
-					fmt.Sprintf("%f", a.CostRatio),
-				}
-
-				if err := csvWriter.Write(record); err != nil {
-					http.Error(w, fmt.Sprintf("Failed to write csv %s: %s", record, err), http.StatusInternalServerError)
-					return
-				}
-			}
-		}
-
 	}
 }
 
@@ -688,7 +656,7 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// todo: parse other params
-	aggregate := ""
+	aggregate := "pod"
 	if aggregateStr, ok := paramsMap["aggregate"]; ok {
 		aggregate = aggregateStr
 	}
@@ -776,39 +744,8 @@ func ComputeEstimatedCostHandler(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, string(p))
 	case "csv":
 		filename := "cost.csv"
-
-		w.Header().Set("Content-Type", "text/csv")
-		w.Header().Set("Content-Disposition", "attachment; filename="+filename)
-		csvWriter := csv.NewWriter(w)
-		defer csvWriter.Flush()
-
-		var dimension string
-		if aggregate == "" {
-			dimension = "Pod"
-		} else {
-			caser := cases.Title(language.English)
-			dimension = caser.String(aggregate)
-		}
-		if err := csvWriter.Write([]string{dimension, "Start", "End", "Cost", "CostRatio"}); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to write csv: %s", err), http.StatusInternalServerError)
-			return
-		}
-
-		for _, as := range asr.Allocations {
-			for _, a := range *as {
-				record := []string{
-					a.Name,
-					a.Start.Format(time.RFC3339),
-					a.End.Format(time.RFC3339),
-					fmt.Sprintf("%f", a.Cost),
-					fmt.Sprintf("%f", a.CostRatio),
-				}
-
-				if err := csvWriter.Write(record); err != nil {
-					http.Error(w, fmt.Sprintf("Failed to write csv %s: %s", record, err), http.StatusInternalServerError)
-					return
-				}
-			}
+		if err := writeCSVAllocationResponse(w, filename, *asr, allocationParams); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
@@ -855,6 +792,76 @@ func (cm *CostManager) preprocessFilter(filter *types.Filter) *types.Filter {
 	}
 
 	return filter
+}
+
+func writeCSVAllocationResponse(w http.ResponseWriter, filename string, asr types.AllocationSetRange, params AllocationParams) error {
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+	csvWriter := csv.NewWriter(w)
+	defer csvWriter.Flush()
+
+	var csvFormat []string
+	if params.aggregate == "pod" {
+		csvFormat = []string{
+			"Pod",
+			"Start",
+			"End",
+			"Cost",
+			"CostRatio",
+			"Controller",
+			"ControllerKind",
+			"Node",
+			"ProviderId",
+			"Labels",
+			"CpuCoreUsageAverage",
+			"RamByteUsageAverage",
+			"Cluster",
+		}
+	} else {
+		caser := cases.Title(language.English)
+		dimension := caser.String(params.aggregate)
+		csvFormat = []string{dimension, "Start", "End", "Cost", "CostRatio"}
+	}
+	if err := csvWriter.Write(csvFormat); err != nil {
+		return fmt.Errorf("failed to write csv: %w", err)
+	}
+
+	for _, as := range asr.Allocations {
+		for _, a := range *as {
+			var record []string
+			if params.aggregate == "pod" {
+				record = []string{
+					a.Name,
+					a.Start.Format(time.RFC3339),
+					a.End.Format(time.RFC3339),
+					fmt.Sprintf("%f", a.Cost),
+					fmt.Sprintf("%f", a.CostRatio),
+					a.Properties.Controller,
+					a.Properties.ControllerKind,
+					a.Properties.Node,
+					a.Properties.ProviderID,
+					fmt.Sprintf("%s", a.Properties.Labels),
+					fmt.Sprintf("%f", a.CPUCoreUsageAverage),
+					fmt.Sprintf("%f", a.RAMBytesUsageAverage),
+					a.Properties.Cluster,
+				}
+			} else {
+				record = []string{
+					a.Name,
+					a.Start.Format(time.RFC3339),
+					a.End.Format(time.RFC3339),
+					fmt.Sprintf("%f", a.Cost),
+					fmt.Sprintf("%f", a.CostRatio),
+				}
+			}
+
+			if err := csvWriter.Write(record); err != nil {
+				return fmt.Errorf("failed to write csv %+v: %w", record, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 type Error struct {

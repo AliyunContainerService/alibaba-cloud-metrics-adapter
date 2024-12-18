@@ -82,7 +82,7 @@ func (as *AllocationSet) AggregateBy(aggregateBy string, idleByNode bool) (*Allo
 		return nil, nil
 	}
 
-	if aggregateBy == "" {
+	if aggregateBy == "pod" {
 		return as, nil
 	}
 
