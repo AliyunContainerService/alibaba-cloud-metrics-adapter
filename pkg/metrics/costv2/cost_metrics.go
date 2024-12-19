@@ -227,8 +227,8 @@ func buildExternalQuery(metricName string, requirementMap map[string][]string) (
 	if list, ok := requirementMap["created_by_name"]; ok {
 		kubePodInfoStrList = append(kubePodInfoStrList, fmt.Sprintf(`created_by_name=~"%s"`, strings.Join(list, "|")))
 	}
+	kubePodInfoStrList = append(kubePodInfoStrList, commonPromLabelStrList...)
 	if len(kubePodInfoStrList) > 0 {
-		kubePodInfoStrList = append(kubePodInfoStrList, commonPromLabelStrList...)
 		kubePodInfoStr = strings.Join(kubePodInfoStrList, ",")
 	}
 
