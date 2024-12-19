@@ -286,6 +286,9 @@ func (cm *CostManager) initPodMap(window types.Window, metricSelector labels.Sel
 			}
 
 			// set when metric has "cluster" label, for self-build prometheus
+			if cluster, ok := item.MetricLabels["unique_cluster_id"]; ok {
+				podMap[key].Allocations.Properties.Cluster = cluster // for debug now
+			}
 			if cluster, ok := item.MetricLabels["cluster"]; ok {
 				podMap[key].Allocations.Properties.Cluster = cluster
 			}
