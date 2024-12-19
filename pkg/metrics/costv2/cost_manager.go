@@ -126,7 +126,7 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, params Allocation
 	totalNodeCost := 0.0
 	nodeCostList := cm.getExternalMetrics("*", CostNode, metricSelector)
 	for _, nodeCost := range nodeCostList.Items {
-		totalNodeCost += float64(nodeCost.Value.MilliValue() / 1000)
+		totalNodeCost += float64(nodeCost.Value.MilliValue()) / 1000
 	}
 	totalCost := totalNodeCost
 
@@ -203,8 +203,8 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, params Allocation
 						Name:      fmt.Sprintf("%s%s", types.SplitIdlePrefix, nodeCost.MetricLabels["node"]),
 						Start:     *window.Start(),
 						End:       *window.End(),
-						Cost:      float64(nodeCost.Value.MilliValue()/1000) / totalNodeCost * totalCost,
-						CostRatio: float64(nodeCost.Value.MilliValue()/1000) / totalNodeCost,
+						Cost:      float64(nodeCost.Value.MilliValue()) / 1000 / totalNodeCost * totalCost,
+						CostRatio: float64(nodeCost.Value.MilliValue()) / 1000 / totalNodeCost,
 					}
 					allocSet.Set(idleNodeAllocation)
 				}
@@ -475,7 +475,7 @@ func (cm *CostManager) getSingleValueMetric(metricName string, metricSelector la
 		klog.Errorf("external metric %s value is empty", metricName)
 		return 0
 	}
-	return float64(valueList.Items[0].Value.MilliValue() / 1000)
+	return float64(valueList.Items[0].Value.MilliValue()) / 1000
 }
 
 func ComputeAllocationHandler(w http.ResponseWriter, r *http.Request) {
