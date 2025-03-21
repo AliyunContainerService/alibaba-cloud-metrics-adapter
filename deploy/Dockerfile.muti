@@ -15,7 +15,7 @@ RUN apt-get update -y && apt-get install gcc ca-certificates -y
 RUN make ARCH=$TARGETARCH
 
 
-FROM --platform=$BUILDPLATFORM alpine:3.16
+FROM --platform=$TARGETPLATFORM alpine:3.16
 LABEL maintainer="KeyOfSpectator <shichun.fsc@alibaba-inc.com>"
 
 COPY --from=build-env /usr/local/go/lib/time/zoneinfo.zip /usr/local/go/lib/time/zoneinfo.zip
