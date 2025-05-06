@@ -10,6 +10,7 @@ import (
 	"k8s.io/klog/v2"
 	"log"
 	"net/http"
+	_ "net/http/pprof”
 	"os"
 )
 
