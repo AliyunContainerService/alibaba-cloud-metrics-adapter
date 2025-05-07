@@ -10,6 +10,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"net/http"
 	"net/url"
+	"os"
 	basecmd "sigs.k8s.io/custom-metrics-apiserver/pkg/cmd"
 	prom "sigs.k8s.io/prometheus-adapter/pkg/client"
 	cfg "sigs.k8s.io/prometheus-adapter/pkg/config"
@@ -34,10 +35,16 @@ type AlibabaMetricsAdapterOptions struct {
 	PrometheusAuthConf string
 	// PrometheusCAFile points to the file containing the ca-root for connecting with Prometheus
 	PrometheusCAFile string
+	// PrometheusClientTLSCertFile points to the file containing the client TLS cert for connecting with Prometheus
+	PrometheusClientTLSCertFile string
+	// PrometheusClientTLSKeyFile points to the file containing the client TLS key for connecting with Prometheus
+	PrometheusClientTLSKeyFile string
 	// PrometheusTokenFile points to the file that contains the bearer token when connecting with Prometheus
 	PrometheusTokenFile string
 	// PrometheusHeaders is a k=v list of headers to set on requests to PrometheusURL
 	PrometheusHeaders []string
+	// PrometheusVerb is a verb to set on requests to PrometheusURL
+	PrometheusVerb string
 	// AdapterConfigFile points to the file containing the metrics discovery configuration.
 	AdapterConfigFile string
 	// MetricsRelistInterval is the interval at which to relist the set of available metrics
@@ -61,10 +68,16 @@ func (cmd *AlibabaMetricsAdapterOptions) AddFlags() {
 		"kubeconfig file used to configure auth when connecting to Prometheus.")
 	cmd.Flags().StringVar(&cmd.PrometheusCAFile, "prometheus-ca-file", cmd.PrometheusCAFile,
 		"Optional CA file to use when connecting with Prometheus")
+	cmd.Flags().StringVar(&cmd.PrometheusClientTLSCertFile, "prometheus-client-tls-cert-file", cmd.PrometheusClientTLSCertFile,
+		"Optional client TLS cert file to use when connecting with Prometheus, auto-renewal is not supported")
+	cmd.Flags().StringVar(&cmd.PrometheusClientTLSKeyFile, "prometheus-client-tls-key-file", cmd.PrometheusClientTLSKeyFile,
+		"Optional client TLS key file to use when connecting with Prometheus, auto-renewal is not supported")
 	cmd.Flags().StringVar(&cmd.PrometheusTokenFile, "prometheus-token-file", cmd.PrometheusTokenFile,
 		"Optional file containing the bearer token to use when connecting with Prometheus")
 	cmd.Flags().StringArrayVar(&cmd.PrometheusHeaders, "prometheus-header", cmd.PrometheusHeaders,
 		"Optional header to set on requests to prometheus-url. Can be repeated")
+	cmd.Flags().StringVar(&cmd.PrometheusVerb, "prometheus-verb", cmd.PrometheusVerb,
+		"HTTP verb to set on requests to Prometheus. Possible values: \"GET\", \"POST\"")
 	cmd.Flags().StringVar(&cmd.AdapterConfigFile, "config", cmd.AdapterConfigFile,
 		"Configuration file containing details of how to transform between Prometheus metrics "+
 			"and custom metrics API resources")
@@ -102,9 +115,10 @@ func (cmd *AlibabaMetricsAdapterOptions) MakePromClient() (prom.Client, error) {
 		return nil, fmt.Errorf("invalid Prometheus URL %q: %v", baseURL, err)
 	}
 
+	// prom client http auth
 	var httpClient *http.Client
 	if cmd.PrometheusCAFile != "" {
-		prometheusCAClient, err := makePrometheusCAClient(cmd.PrometheusCAFile, cmd.PrometheusInsecure)
+		prometheusCAClient, err := makePrometheusCAClient(cmd.PrometheusCAFile, cmd.PrometheusClientTLSCertFile, cmd.PrometheusClientTLSKeyFile)
 		if err != nil {
 			return nil, err
 		}
@@ -119,7 +133,7 @@ func (cmd *AlibabaMetricsAdapterOptions) MakePromClient() (prom.Client, error) {
 		klog.Info("successfully using in-cluster auth")
 	} else {
 		// return the default client if we're using no auth
-		//httpClient = http.DefaultClient
+		// httpClient = http.DefaultClient
 		httpClient = &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
@@ -130,6 +144,7 @@ func (cmd *AlibabaMetricsAdapterOptions) MakePromClient() (prom.Client, error) {
 		klog.Infof("successfully using default http client auth. InsecureSkipVerify: %v", cmd.PrometheusInsecure)
 	}
 
+	// prom client token auth
 	if cmd.PrometheusTokenFile != "" {
 		data, err := ioutil.ReadFile(cmd.PrometheusTokenFile)
 		if err != nil {
@@ -138,13 +153,14 @@ func (cmd *AlibabaMetricsAdapterOptions) MakePromClient() (prom.Client, error) {
 		httpClient.Transport = transport.NewBearerAuthRoundTripper(string(data), httpClient.Transport)
 	}
 
+	// prom client http header
 	genericPromClient := prom.NewGenericAPIClient(httpClient, baseURL, parseHeaderArgs(cmd.PrometheusHeaders))
 	instrumentedGenericPromClient := utils.InstrumentGenericAPIClient(genericPromClient, baseURL.String())
 	return prom.NewClientForAPI(instrumentedGenericPromClient), nil
 }
 
-func makePrometheusCAClient(caFilename string, insecure bool) (*http.Client, error) {
-	data, err := ioutil.ReadFile(caFilename)
+func makePrometheusCAClient(caFilePath string, tlsCertFilePath string, tlsKeyFilePath string) (*http.Client, error) {
+	data, err := os.ReadFile(caFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read prometheus-ca-file: %v", err)
 	}
@@ -154,11 +170,27 @@ func makePrometheusCAClient(caFilename string, insecure bool) (*http.Client, err
 		return nil, fmt.Errorf("no certs found in prometheus-ca-file")
 	}
 
+	if (tlsCertFilePath != "") && (tlsKeyFilePath != "") {
+		tlsClientCerts, err := tls.LoadX509KeyPair(tlsCertFilePath, tlsKeyFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read TLS key pair: %v", err)
+		}
+		return &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs:      pool,
+					Certificates: []tls.Certificate{tlsClientCerts},
+					MinVersion:   tls.VersionTLS12,
+				},
+			},
+		}, nil
+	}
+
 	return &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				RootCAs:            pool,
-				InsecureSkipVerify: insecure,
+				RootCAs:    pool,
+				MinVersion: tls.VersionTLS12,
 			},
 		},
 	}, nil
