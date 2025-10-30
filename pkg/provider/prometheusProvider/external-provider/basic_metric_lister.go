@@ -149,7 +149,7 @@ func (l *basicMetricLister) ListAllMetrics() (MetricUpdateResult, error) {
 		newNamers = append(newNamers, namer)
 	}
 
-	klog.V(10).Infof("Set available external metric list from Prometheus to: %v", newSeries)
+	//klog.V(10).Infof("Set available external metric list from Prometheus to: %v", newSeries)
 
 	result.series = newSeries
 	result.namers = newNamers
