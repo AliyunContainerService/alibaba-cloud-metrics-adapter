@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -114,13 +115,25 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, params Allocation
 
 	cm.initPodMap(window, metricSelector, podMap)
 
-	cm.applyMetricToPodMap(window, CPUCoreRequestAverage, metricSelector, podMap)
-	cm.applyMetricToPodMap(window, CPUCoreUsageAverage, metricSelector, podMap)
-	cm.applyMetricToPodMap(window, MemoryRequestAverage, metricSelector, podMap)
-	cm.applyMetricToPodMap(window, MemoryUsageAverage, metricSelector, podMap)
-	cm.applyMetricToPodMap(window, CostPodCPURequest, metricSelector, podMap)
-	cm.applyMetricToPodMap(window, CostPodMemoryRequest, metricSelector, podMap)
-	cm.applyMetricToPodMap(window, CostCustom, metricSelector, podMap)
+	var wg sync.WaitGroup
+	metrics := []string{
+		CPUCoreRequestAverage,
+		CPUCoreUsageAverage,
+		MemoryRequestAverage,
+		MemoryUsageAverage,
+		CostPodCPURequest,
+		CostPodMemoryRequest,
+		CostCustom,
+	}
+
+	for _, metric := range metrics {
+		wg.Add(1)
+		go func(metricName string) {
+			defer wg.Done()
+			cm.applyMetricToPodMap(window, metricName, metricSelector, podMap)
+		}(metric)
+	}
+	wg.Wait()
 
 	weightCPU, weightRAM := getCostWeights()
 	totalNodeCost := 0.0
@@ -227,8 +240,35 @@ func (cm *CostManager) ComputeAllocation(start, end time.Time, params Allocation
 func (cm *CostManager) initPodMap(window types.Window, metricSelector labels.Selector, podMap map[types.PodMeta]*types.Pod) {
 	klog.Infof("init podMap with window: %v", window)
 
+	// 并行获取所有基础指标
+	var (
+		wg                sync.WaitGroup
+		kubePodInfoList   *externalv1beta1.ExternalMetricValueList
+		kubePodLabelsList *externalv1beta1.ExternalMetricValueList
+		nodeInfoList      *externalv1beta1.ExternalMetricValueList
+	)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		kubePodInfoList = cm.getExternalMetrics("*", KubePodInfo, metricSelector)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		kubePodLabelsList = cm.getExternalMetrics("*", KubePodLabels, metricSelector)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		nodeInfoList = cm.getExternalMetrics("*", KubeNodeInfo, metricSelector)
+	}()
+
+	wg.Wait()
+
 	// add pod properties from kube_pod_info
-	kubePodInfoList := cm.getExternalMetrics("*", KubePodInfo, metricSelector)
 	if kubePodInfoList == nil || kubePodInfoList.Items == nil {
 		klog.Errorf("external metric %s value is empty", KubePodInfo)
 	}
@@ -296,7 +336,6 @@ func (cm *CostManager) initPodMap(window types.Window, metricSelector labels.Sel
 	}
 
 	// add pod properties from kube_pod_labels
-	kubePodLabelsList := cm.getExternalMetrics("*", KubePodLabels, metricSelector)
 	if kubePodLabelsList == nil || kubePodLabelsList.Items == nil {
 		klog.Errorf("external metric %s value is empty", KubePodLabels)
 	}
@@ -321,7 +360,6 @@ func (cm *CostManager) initPodMap(window types.Window, metricSelector labels.Sel
 	}
 
 	// add pod properties from kube_node_info
-	nodeInfoList := cm.getExternalMetrics("*", KubeNodeInfo, metricSelector)
 	if nodeInfoList == nil || nodeInfoList.Items == nil {
 		klog.Errorf("external metric %s value is empty", KubeNodeInfo)
 	}
