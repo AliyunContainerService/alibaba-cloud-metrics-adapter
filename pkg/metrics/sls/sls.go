@@ -21,6 +21,7 @@ const (
 	SLS_INGRESS_LATENCY_P9999 = "sls_ingress_latency_p9999"
 	SLS_INGRESS_LATENCY_P99   = "sls_ingress_latency_p99"
 	SLS_INGRESS_INFLOW        = "sls_ingress_inflow" // byte per second
+	SLS_CUSTOM_SQL            = "sls_custom_sql"
 
 	SLS_LABEL_PROJECT         = "sls.project"
 	SLS_LABEL_LOGSTORE        = "sls.logstore"
@@ -29,6 +30,7 @@ const (
 	SLS_LABEL_QUERY_MAX_RETRY = "sls.query.max_retry" // max retry, default 5
 	SLS_LABEL_INGRESS_ROUTE   = "sls.ingress.route"   // e.g. namespace-svc-port
 	SLS_INTERNAL_ENDPOINT     = "sls.internal.endpoint"
+	SLS_LABEL_CUSTOM_SQL      = "sls.custom.sql" // custom sql query, will override other metrics logic
 
 	MIN_INTERVAL      = 15
 	MAX_RETRY_DEFAULT = 5
@@ -70,6 +72,9 @@ func (ss *SLSMetricSource) GetExternalMetricInfoList() []p.ExternalMetricInfo {
 	// ingress inflow
 	metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
 		Metric: SLS_INGRESS_INFLOW,
+	})
+	metricInfoList = append(metricInfoList, p.ExternalMetricInfo{
+		Metric: SLS_CUSTOM_SQL,
 	})
 	return metricInfoList
 }
@@ -146,9 +151,10 @@ func getSLSParams(requirements labels.Requirements) (params *SLSIngressParams, e
 			if value != "" && value == "false" {
 				params.Internal = false
 			}
+		case SLS_LABEL_CUSTOM_SQL:
+			params.CustomSQL = value
 		}
 	}
-
 	if params.Project == "" || params.LogStore == "" {
 		return params, errors.New(fmt.Sprintf("%s and %s must be provided", SLS_LABEL_PROJECT, SLS_LABEL_LOGSTORE))
 	}
@@ -176,6 +182,7 @@ type SLSGlobalParams struct {
 	DelaySeconds int
 	MaxRetry     int
 	Internal     bool
+	CustomSQL    string
 }
 
 func NewSLSMetricSource() *SLSMetricSource {

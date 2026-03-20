@@ -56,6 +56,12 @@ func (ss *SLSMetricSource) getSLSIngressQuery(params *SLSIngressParams, metricNa
 		queryItem = "approx_percentile(request_time, 0.99) * 1000"
 	case SLS_INGRESS_INFLOW:
 		queryItem = fmt.Sprintf("sum(request_length) / %d", params.Interval)
+	case SLS_CUSTOM_SQL:
+		if params.CustomSQL != "" {
+			queryItem = params.CustomSQL
+		} else {
+			log.Warningf("Custom SQL is empty, please check. metricName: %s", metricName)
+		}
 	default:
 		// add default action for unknown metric
 		query = ""
