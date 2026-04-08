@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.20 AS build-env
+FROM --platform=$BUILDPLATFORM golang:1.24 AS build-env
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 ARG BUILDARCH
@@ -15,7 +15,7 @@ RUN apt-get update -y && apt-get install gcc ca-certificates -y
 RUN make ARCH=$TARGETARCH
 
 
-FROM --platform=$TARGETPLATFORM alpine:3.16
+FROM --platform=$TARGETPLATFORM registry-cn-hangzhou.ack.aliyuncs.com/dev/alpine:3.18-update
 LABEL maintainer="KeyOfSpectator <shichun.fsc@alibaba-inc.com>"
 
 COPY --from=build-env /usr/local/go/lib/time/zoneinfo.zip /usr/local/go/lib/time/zoneinfo.zip

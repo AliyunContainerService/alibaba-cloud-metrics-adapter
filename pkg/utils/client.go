@@ -1,11 +1,12 @@
 package utils
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/denverdino/aliyungo/metadata"
+	"github.com/AliyunContainerService/ack-ram-tool/pkg/ecsmetadata"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"os"
@@ -55,10 +56,11 @@ func Decrypt(s string, keyring []byte) ([]byte, error) {
 }
 
 func GetAccessUserInfo() (accessUserInfo *AccessUserInfo, err error) {
-	m := metadata.NewMetaData(nil)
-	region, err := GetRegionFromEnv()
+	m := ecsmetadata.DefaultClient
+	region, err := m.GetRegionId(context.Background())
+
 	if err != nil {
-		region, err = m.Region()
+		region, err = m.GetRegionId(context.Background())
 		if err != nil {
 			klog.Errorf("failed to get Region,because of %s", err.Error())
 			return nil, err
@@ -112,13 +114,13 @@ func GetAccessUserInfo() (accessUserInfo *AccessUserInfo, err error) {
 		akInfo.Region = region
 	} else {
 		//兼容老的metaserver获取形式
-		roleName, err := m.RoleName()
+		roleName, err := m.GetRoleName(context.Background())
 		if err != nil {
 			klog.Errorf("failed to get RoleName,because of %s", err.Error())
 			return nil, err
 		}
 
-		auth, err := m.RamRoleToken(roleName)
+		auth, err := m.GetRoleCredentials(context.Background(), roleName)
 		if err != nil {
 			klog.Errorf("failed to get RamRoleToken,because of %s", err.Error())
 			return nil, err
